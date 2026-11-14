@@ -65,18 +65,18 @@ pnpm --dir frontend build
 
 页面明确标注交互原型和示例数据。问答不调用模型，不执行 RAG；图谱不是自动抽取结果；刷新恢复初始示例，不持久化会话或导入数据。
 
-四份 PDF 副本在 `frontend/public/demo/`，来源为仓库内的 `version_chatgpt/知识库语料/`。当前版本均为 1.1，员工手册 5 页，其余各 4 页。页码、来源版本及文件 SHA-256 保存在 `frontend/src/demo-documents.json`。原始语料不在前端实现中修改。
+四份 PDF 副本在 `frontend/public/demo/`，来源为仓库内的 `test-data/version_chatgpt/知识库语料/`。当前版本均为 1.1，员工手册 5 页，其余各 4 页。页码、来源版本及文件 SHA-256 保存在 `frontend/src/demo-documents.json`。原始语料不在前端实现中修改。
 
 ## 测试资料
 
-四套原始资料随源码一起保存，用于后续上传、解析、检索和问答评测：
+四套原始资料统一保存在 [`test-data/`](test-data/) 中，用于后续上传、解析、检索和问答评测；保留版本子目录，避免文件重名和制度规则混淆：
 
 | 目录 | 内容 |
 | --- | --- |
-| [version_chatgpt](version_chatgpt/) | 制度 PDF/DOCX、50 题独立评测集和一致性审查报告；首批验收语料。 |
-| [version_deepseek](version_deepseek/) | 制度 PDF/DOCX 和测试问题集。 |
-| [version_gemini](version_gemini/) | 制度 Markdown/PDF 和 CSV/JSONL 评测资料。 |
-| [version_qwen](version_qwen/) | 制度 DOC/PDF 和 CSV 评测资料。 |
+| [version_chatgpt](test-data/version_chatgpt/) | 制度 PDF/DOCX、50 题独立评测集和一致性审查报告；首批验收语料。 |
+| [version_deepseek](test-data/version_deepseek/) | 制度 PDF/DOCX 和测试问题集。 |
+| [version_gemini](test-data/version_gemini/) | 制度 Markdown/PDF 和 CSV/JSONL 评测资料。 |
+| [version_qwen](test-data/version_qwen/) | 制度 DOC/PDF 和 CSV 评测资料。 |
 
 各套资料独立使用；评测问题、标准答案和审查报告不导入知识库。DOC 文件保留用于格式兼容性测试，当前设计的首版上传范围仍为 PDF、DOCX 和 Markdown。详见[测试资料使用说明](docs/test-data.md)。
 
