@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12、uv、FastAPI、Pydantic、SQLAlchemy 2、psycopg 3、Alembic、PostgreSQL 16/pgvector、Celery/Redis、RustFS/boto3、MinerU 云端、阿里 Embedding/Rerank、Neo4j、React/TypeScript/Vite、AI SDK、Tailwind/shadcn、pytest/Vitest。
 
-**Spec:** [design.md](./design.md)。所有路径相对于本项目根目录 `project/`。本计划按下方进度逐项执行；未勾选内容仍属待实现约定，不能据演示数据视为已完成。
+**Spec:** [design.md](./design.md)。所有路径相对于本项目根目录 `enterprise-knowledge-assistant/`。本计划按下方进度逐项执行；未勾选内容仍属待实现约定，不能据演示数据视为已完成。
 
 ## 当前进度（2026-11-14）
 
@@ -29,7 +29,7 @@
 ## 文件边界
 
 ```text
-project/
+enterprise-knowledge-assistant/
   compose.yaml                 # 四个基础设施、Worker、Beat 的明确启动定义
   .env.example                 # 服务与模型配置示例，无密钥
   README.md                    # 从空环境启动与验收
@@ -106,9 +106,9 @@ def test_eval_cases_are_complete_and_separate():
     import json
     from pathlib import Path
     cases = [json.loads(x) for x in Path("eval/dataset.jsonl").read_text(encoding="utf-8").splitlines() if x]
-    assert len(cases) == 40
-    assert len({x["id"] for x in cases}) == 40
-    assert sum(x["answerable"] == "不可直接回答" for x in cases) == 6
+    assert len(cases) == 50
+    assert len({x["id"] for x in cases}) == 50
+    assert sum(x["answerable"] == "不可直接回答" for x in cases) == 7
     assert all(x["question"] and x["gold_answer"] and x["source_clause"] for x in cases)
 ```
 
@@ -219,8 +219,8 @@ def test_uncited_answer_does_not_claim_all_sources():
 - [ ] 实现三栏工作台，窄屏用来源抽屉；上传显示排队、处理阶段、失败原因及受控重试；解析正文和切片可预览。
 - [ ] PDF 原件按固定 version_id 从后端流式读取，Markdown/模型输出渲染保持安全转义；解析图片通过应用资源接口展示。
 - [ ] 用组件测试与浏览器完整走通：上传 -> ready -> 提问 -> 流式回答 -> 点击引用 -> 跳页/章节；刷新恢复会话；新会话不继承旧问题。
-- [ ] 实现最小评测 runner 和逐题报告，先验证 40 条输入均有结果、超时计入失败，再运行核心题集。Task 9 扩展图谱对比和交付报告。
-- [ ] 运行 `pnpm --dir frontend test` 与 `pnpm --dir frontend build`。此时先完成核心 40 题回归；核心失败优先修复，再进入 Task 8。
+- [ ] 实现最小评测 runner 和逐题报告，先验证 50 条输入均有结果、超时计入失败，再运行核心题集。Task 9 扩展图谱对比和交付报告。
+- [ ] 运行 `pnpm --dir frontend test` 与 `pnpm --dir frontend build`。此时先完成核心 50 题回归；核心失败优先修复，再进入 Task 8。
 
 ## Task 8：定向图谱与两个多跳证据示例
 
@@ -241,8 +241,8 @@ def test_uncited_answer_does_not_claim_all_sources():
 
 **Interfaces:** `uv run --project backend python eval/run.py --dataset eval/dataset.jsonl --output eval/results/baseline.jsonl` 逐题调用实际 API；`uv run --project backend python eval/report.py --input eval/results/baseline.jsonl` 输出完整题数、失败项、引用/关键事实/拒答与耗时。模型语义判定作为辅助，保留原始输出供人工核对。
 
-- [ ] 写报告完整性测试：40 条输入必须有 40 条结果，超时与服务错误计入失败，不能当作拒答通过；已知相似题分组保留在报告中。
-- [ ] 运行 40 题并逐项核对来源和关键事实，特别检查 6 道不可直接回答题；记录真实问题，不为提高成绩修改正确原文。
+- [ ] 写报告完整性测试：50 条输入必须有 50 条结果，超时与服务错误计入失败，不能当作拒答通过；已知相似题分组保留在报告中。
+- [ ] 运行 50 题并逐项核对来源和关键事实，特别检查 7 道不可直接回答题；记录真实问题，不为提高成绩修改正确原文。
 - [ ] 对多跳题以相同模型和预算运行基础检索及图谱扩展两组，报告证据召回、答案、引用、耗时、调用量；没有改善也如实记录。
 - [ ] 根目录运行后端默认单测、前端测试与构建、迁移检查；真实服务测试单列结果。未运行、被跳过和未通过分别记录。
 - [ ] 编写空环境启动顺序、配置说明、Worker/Beat 启动和失败恢复步骤；再次从启动到演示完整执行一遍。
