@@ -1,0 +1,72 @@
+name: enterprise-knowledge-assistant
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg16@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
+    environment:
+      POSTGRES_USER: ${KH_POSTGRES_USER:?Run backend/scripts/init_env.py first}
+      POSTGRES_PASSWORD: ${KH_POSTGRES_PASSWORD:?Set KH_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${KH_POSTGRES_DB:-knowledge_assistant}
+    ports: ["127.0.0.1:5544:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:6384:6379"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rustfs:
+    image: rustfs/rustfs:1.0.5@sha256:b81d16a90ee25bd9511280127ca1471788c6e874cf0f0da759645f46b2dc1d74
+    environment:
+      RUSTFS_ACCESS_KEY: ${KH_S3_ACCESS_KEY:?Set KH_S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${KH_S3_SECRET_KEY:?Set KH_S3_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: :9000
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: :9001
+    ports: ["127.0.0.1:9014:9000", "127.0.0.1:9015:9001"]
+    volumes: ["rustfs_data:/data"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.26.0-community@sha256:5a015e53de1895e7eee1574ae0325cf8c4b89587222778108c594bdd45a474b5
+    environment:
+      NEO4J_AUTH: neo4j/${KH_NEO4J_PASSWORD:?Set KH_NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports: ["127.0.0.1:7484:7474", "127.0.0.1:7694:7687"]
+    volumes: ["neo4j_data:/data", "neo4j_logs:/logs"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  rustfs_data:
+  neo4j_data:
+  neo4j_logs:

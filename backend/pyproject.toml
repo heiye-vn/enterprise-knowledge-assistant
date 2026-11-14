@@ -1,0 +1,42 @@
+[project]
+name = "enterprise-knowledge-assistant-backend"
+version = "0.1.0"
+description = "企业知识助理后端"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "pydantic-settings>=2.8,<3",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "pgvector>=0.4,<1",
+  "alembic>=1.14,<2",
+  "redis>=5,<8",
+  "boto3>=1.35,<2",
+  "neo4j>=5.26,<7",
+  "celery[redis]>=5.4,<6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "httpx>=0.28,<1",
+    "ruff>=0.11,<1",
+    "httpx2>=2.16.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -m 'not integration'"
+markers = ["integration: requires this project's real infrastructure"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
