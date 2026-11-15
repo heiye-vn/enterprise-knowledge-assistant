@@ -5,7 +5,7 @@ import { GraphChart } from 'echarts/charts.js';
 import { SVGRenderer } from 'echarts/renderers.js';
 import { AriaComponent, TooltipComponent } from 'echarts/components.js';
 import { LabelLayout } from 'echarts/features.js';
-import { graphKinds, graphScenarios } from '../src/graph-data.ts';
+import { graphKinds, graphScenarios } from './fixtures/graph-data.ts';
 import { buildGraphView } from '../src/graph-model.ts';
 import { buildGraphOption, fitGraphToCanvas } from '../src/graph-chart.ts';
 import { createGraphViewportController } from '../src/graph-viewport.ts';
@@ -68,6 +68,25 @@ function createExpandedChart() {
   chart.setOption(buildGraphOption(view, true));
   return chart;
 }
+
+test('hidden canvas resize notifications preserve the graph and visible resizing resumes', () => {
+  const chart = createExpandedChart();
+  const viewport = createGraphViewportController(chart);
+  try {
+    assert.doesNotThrow(() => {
+      viewport.resize(0, 350);
+      viewport.resize(330, 0);
+    });
+    assert.deepEqual([chart.getWidth(), chart.getHeight()], [330, 350]);
+    viewport.resize(900, 420);
+    viewport.fit();
+    assert.deepEqual([chart.getWidth(), chart.getHeight()], [900, 420]);
+    const data = chart.getModel().getSeriesByIndex(0).getData();
+    for (let index = 0; index < data.count(); index++) {
+      assert(chart.convertToPixel({ seriesIndex: 0 }, data.getItemLayout(index)).every(Number.isFinite));
+    }
+  } finally { viewport.dispose(); chart.dispose(); }
+});
 
 test('manual fit adjusts the current viewport immediately without rebuilding or moving graph nodes', () => {
   const chart = createExpandedChart();

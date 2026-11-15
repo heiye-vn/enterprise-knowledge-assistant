@@ -22,6 +22,13 @@ export function createGraphViewportController(instance: EChartsType) {
   }
   instance.on('graphroam', cancelAutoFit);
   return {
+    resize(width: number, height: number) {
+      // Hidden or detached hosts can report zero size before React tears down the observer.
+      if (disposed || instance.isDisposed() || width <= 0 || height <= 0) return;
+      instance.resize({ width, height, animation: { duration: 0 } });
+      pending = true;
+      schedule();
+    },
     requestAutoFit() { if (!disposed) { pending = true; schedule(); } },
     onRendered: schedule,
     fit() {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Search, X } from 'lucide-react';
-import type { KnowledgeDocument } from './demo';
+import type { KnowledgeDocument } from './document-types';
 
 type Props = { open: boolean; documents: KnowledgeDocument[]; selectedIds: string[] | null; onClose: () => void; onApply: (ids: string[] | null) => void };
 
@@ -11,11 +11,11 @@ export default function ScopeDialog({ open, documents, selectedIds, onClose, onA
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [requestedPage, setRequestedPage] = useState(1);
-  const available = documents.filter(doc => doc.status === 'ready' && !doc.demoUpload);
+  const available = documents.filter(doc => doc.canQuery);
   useEffect(() => {
     if (open && !dialog.current?.open) {
       setMode(selectedIds === null ? 'all' : 'custom');
-      setIds(selectedIds ?? documents.filter(d => d.status === 'ready' && !d.demoUpload).map(d => d.id));
+      setIds(selectedIds ?? documents.filter(d => d.canQuery).map(d => d.id));
       setSearch(''); setCategory(''); setRequestedPage(1); dialog.current?.showModal();
     } else if (!open) dialog.current?.close();
   }, [open, selectedIds, documents]);
