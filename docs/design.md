@@ -1,5 +1,8 @@
 # 企业知识助理：首版设计与验收标准
 
+> **交付状态（2026-11-15）**：入库、混合检索、有据问答、意图/检索详情、真实图谱、两跳证据、流式停止、Tavily、LangSmith 和文档删除均已接入。20 题真实验收及 15～20 分钟演示脚本已提供，完整 50 题与 MCP 暂缓。当前范围见 [README](../README.md)、[收尾记录](dev-notes/delivery-wrapup.md)和[增强待办](roadmap-2026-11-15.md)。本文保留初始设计背景；分类、版本管理、重新解析和重建索引不恢复到前端。
+
+
 日期：2026-11-13。交付窗口：2026-11-14 至 2026-11-15；面试题截止时间：2026-11-16 上午。
 
 ## 1. 目标与边界
@@ -10,7 +13,7 @@
 
 加分项：四份制度的定向实体关系抽取、可溯源图谱、两个基于跨制度证据的多跳问答示例。核心问答与引用验收完成后再实现图谱。
 
-本次不包含：登录注册、账号鉴权、长期个人记忆、联网搜索、自由生成 Cypher 的 Agent、通用审批系统、图谱社区发现。会话记录持久化属于历史恢复，不等同于长期记忆。
+本次不包含：登录注册、账号鉴权、长期个人记忆、自由生成 Cypher 的 Agent、通用审批系统、图谱社区发现。联网搜索已通过 Tavily 接入，MCP 暂缓。会话记录持久化属于历史恢复，不等同于长期记忆。
 
 ## 2. 项目位置与资料
 
@@ -30,21 +33,21 @@
 | Python | 3.12，uv 管理与锁定依赖 |
 | 后端 | FastAPI、Pydantic、SQLAlchemy 2、psycopg 3、Alembic |
 | 数据 | PostgreSQL 16 + pgvector |
-| 消息任务 | Celery + Redis；文档与图谱使用独立队列和 Worker |
+| 消息任务 | Celery + Redis；文档与图谱使用独立队列，当前单 Worker 消费，Beat 恢复任务 |
 | 对象存储 | RustFS，Python 使用 boto3 接入 S3 API |
 | 解析 | MinerU 云端 API；Markdown 在本地读取 |
 | 检索 | jieba + rank-bm25、pgvector、RRF、阿里 Rerank |
-| 模型 | 聊天模型可选阿里或 OpenAI；Embedding/Rerank 使用阿里 |
+| 模型 | 聊天模型可选千问或第三方 OpenAI 兼容接口；Embedding/Rerank 使用阿里 |
 | 图谱 | Neo4j + 官方 Python 驱动；受控 Cypher |
-| 前端 | React、TypeScript、Vite、Vercel AI SDK |
-| 界面 | Tailwind CSS、少量 shadcn/ui、Lucide |
-| 阅读与图谱 | react-pdf、react-markdown、remark-gfm、Apache ECharts（graph 力导向关系图） |
-| 验证 | pytest、Vitest、JSONL 真实链路评测 |
+| 前端 | React、TypeScript、Vite，原生 fetch 读取 POST SSE |
+| 界面 | CSS、Tailwind 构建插件、Lucide |
+| 阅读与图谱 | react-pdf、docx-preview、react-markdown、remark-gfm、Apache ECharts |
+| 验证 | pytest、Node test runner/tsx、JSONL 真实链路评测 |
 | 本地部署 | Docker Compose 启动 PostgreSQL、Redis、RustFS、Neo4j |
 
 2026-11-13 选型复核：RustFS 官方已发布 [1.0.5 正式版本](https://github.com/rustfs/rustfs/releases/tag/1.0.5)，采用 Apache 2.0 许可证；其 [S3 兼容矩阵](https://github.com/rustfs/rustfs/blob/1.0.5/docs/architecture/s3-compatibility-matrix.md)列明对象上传、读取、删除、列表、HEAD 与 Range 读取的支持范围，不宣称覆盖所有 S3 行为。本项目选择单节点 Docker 部署和独立命名卷，使用 boto3 验证实际需要的接口；2026-11-14 已实际拉取 1.0.5，完成所需 S3 操作与重建持久化验证，并在 Compose 中锁定标签和 digest，记录见[后端基础验证](dev-notes/backend-foundation.md)。正式版本和活跃发布不能单独证明大规模企业部署成熟度。
 
-FastAPI、PostgreSQL/pgvector、Celery/Redis、Neo4j 与 React/AI SDK 继续保留。jieba 是中文分词库，rank-bm25 是进程内关键词排序库，BM25 与向量仍构成双路检索；库的发版频率不能直接作为弃用依据。四份制度是首批验收样本，页面、接口和数据模型支持后续增加文档。此实现不具备完整搜索服务的多副本索引管理与大规模检索能力；首版不额外引入 Elasticsearch，生产扩容时依据实测重新评估。
+FastAPI、PostgreSQL/pgvector、Celery/Redis、Neo4j 与 React 继续保留。jieba 是中文分词库，rank-bm25 是进程内关键词排序库，BM25 与向量仍构成双路检索；库的发版频率不能直接作为弃用依据。四份制度是首批验收样本，页面、接口和数据模型支持后续增加文档。此实现不具备完整搜索服务的多副本索引管理与大规模检索能力；首版不额外引入 Elasticsearch，生产扩容时依据实测重新评估。
 
 全局约束：
 
@@ -55,10 +58,12 @@ FastAPI、PostgreSQL/pgvector、Celery/Redis、Neo4j 与 React/AI SDK 继续保�
 - PostgreSQL 内容与向量写入使用同库事务；RustFS、Redis、Neo4j 不伪装成同一事务。
 - API Key 仅从环境配置读取；配置示例不包含真实凭证，不从参考项目自动复制密钥。
 - 每个业务实体 ID 在接口中使用字符串；同一切片 ID 用于检索、引用和图谱来源关联。
-- 数据模型、接口和 UI Message Stream 协议在首个真实安装版本下验证后锁定。
+- 数据模型、接口和 SSE 事件协议按真实流式验收结果锁定。
 - Celery Worker 和 Beat 在 Linux 容器运行，避免依赖 Windows 原生 Worker 的进程池兼容性。
 
-参考项目示例配置为 `qwen3.7-text-embedding-flash`、1024 维、`qwen3.7-text-rerank`。这些是候选配置，尚未在新项目实际调用；接入时验证账号可用性、返回维度和 API 协议。聊天模型名称由用户后续确定。
+2026-11-14 用户确认使用阿里云百炼中国内地：Embedding 为 `qwen3.7-text-embedding-flash`，Rerank 为 `qwen3.7-text-rerank`，聊天为固定快照 `qwen3.8-max-0902`。前两者见[官方向量与重排序模型表](https://help.aliyun.com/zh/model-studio/embedding-rerank-model)，聊天精确型号见[Chat Completions 参数文档](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions)。Embedding 建议固定 1024 维（官方默认值）；仍须用实际请求核对返回维度、query/document 参数、批次索引及 Rerank 索引映射，不把文档支持当作账号已验证。
+
+后续接入优先使用控制台提供的业务空间专属 API Host。中国内地对应华北2（北京）；官方[地域与接入域名说明](https://help.aliyun.com/zh/model-studio/regions)已推荐 `{WorkspaceId}.cn-beijing.maas.aliyuncs.com`。模型 API Key 与 MinerU Token 分别配置，不复用凭证。当前已接入用户的 QWEN_ 和 MONKEY_ 配置，并完成真实向量、重排、千问与三方回答及流式接口验证。默认 KH_LLM_PROVIDER=qwen，可改为 monkey；向量与重排保持千问。现有 dashscope 兼容 Base URL 已实测可用，未强制更换专属 Host。向量索引、原文检索和问答生成 UI 均已接入，见[模型客户端记录](dev-notes/model-clients.md)。
 
 ## 4. 服务与数据职责
 
@@ -71,11 +76,11 @@ FastAPI、PostgreSQL/pgvector、Celery/Redis、Neo4j 与 React/AI SDK 继续保�
 
 同步 SQLAlchemy 仓储使用 psycopg 3；FastAPI 异步路由中的阻塞数据库与对象存储操作在线程池执行。Celery 在独立进程中建立连接，不跨进程或事件循环共享连接。
 
-首版单知识库的名称与模型配置来自应用配置，不另建知识库表。字段、事务边界与服务校验详见[8 表设计](superpowers/specs/2026-11-14-database-design.md)及[评审用 DDL](superpowers/specs/2026-11-14-database-schema.sql)。精简存储后，接口继续提供原型需要的分类、状态、来源和图谱结构。
+首版单知识库的名称与模型配置来自应用配置，不另建知识库表。字段、事务边界与服务校验详见[8 表设计](superpowers/specs/2026-11-14-database-design.md)及[评审用 DDL](superpowers/specs/2026-11-14-database-schema.sql)。底层兼容字段保留，前端不提供分类与版本管理；接口提供状态、固定来源和图谱结构。
 
 开发端口与旧项目隔离；Compose 使用新项目的网络、容器标识和数据卷。启动前检查冲突，禁止复用或清理旧 Knowledge Hub 的数据卷。
 
-后端镜像供文档 Worker、图谱 Worker 和 Beat 复用；这三个进程在 Linux 容器内运行。原生运行的 FastAPI 使用本机映射端口，容器内 Worker 使用 Compose 服务名连接依赖，两种配置必须分别验证。
+后端镜像供消费文档/图谱队列的 Worker 与 Beat 复用；这两个进程在 Linux 容器内运行。原生运行的 FastAPI 使用本机映射端口，容器内 Worker 使用 Compose 服务名连接依赖，两种配置必须分别验证。
 
 ## 5. 文档导入与任务恢复
 
@@ -89,11 +94,11 @@ flowchart LR
     M --> C[规范化、切片、Embedding]
     C --> V[PG 事务写正文、切片、向量]
     V --> R[文档可问答]
-    R --> G[独立图谱队列与 Worker]
+    R --> G[独立图谱队列 / 同一 Worker]
     G --> N[Neo4j]
 ```
 
-上传校验文件扩展名、文件签名、大小和非空内容。新建使用稳定 document_id，更新走显式版本接口；同文档同 hash 复用既有版本。原件保存后，PG 事务创建文档、版本和 job_type=import 的 processing_jobs 行；该任务行也是待投递依据。投递器先更新 next_dispatch_at 和尝试次数再发送，失败或进程退出后由 Beat 扫描补发；Worker 按 job_id、状态和租约令牌幂等认领。
+上传校验文件扩展名、文件签名、大小和非空内容。新建使用稳定 document_id，更新走显式版本接口；同文档同 hash 复用既有版本。所有新建/新版本在上传前按 SHA-256 检查有效知识库的全部历史版本，命中则提示已有文档并跳过；同批重复只保留第一份。服务端正式接收文件时重新计算指纹并在同一 PG 事务中取得指纹锁、复查及登记，防止并发绕过去重；不按文件名或语义相似度判重。原件保存后，PG 事务创建文档、版本和 job_type=import 的 processing_jobs 行；该任务行也是待投递依据。投递器先更新 next_dispatch_at 和尝试次数再发送，失败或进程退出后由 Beat 扫描补发；Worker 按 job_id、状态和租约令牌幂等认领。
 
 两种任务共用 `queued -> running -> ready` 状态，也可进入 failed/canceled。import 的 stage 为 parsing/chunking/embedding/publishing，graph 的 stage 为 extracting/validating/projecting；前端按类型与阶段显示进度。任务另存错误、可重试性、尝试次数、远端 MinerU 任务 ID、租约和产物位置。
 
@@ -127,7 +132,7 @@ MinerU 通过其云端上传协议接收文件，不依赖云端访问本机 Rus
   -> 阿里 Rerank
   -> 判断证据是否足以回答
   -> 生成带引用回答 / 部分回答 / 明确拒答
-  -> AI SDK 流式输出与最终引用校验
+  -> POST SSE 流式输出与最终引用校验
 ```
 
 短期上下文保留最近若干轮并限制 token 预算。历史仅用于消解指代与条件；历史中的助手制度结论不能替代本轮文档。条件未能消解时先澄清，例如“那四天呢”仍无法确定假期种类时不擅自补全。
@@ -140,7 +145,7 @@ MinerU 通过其云端上传协议接收文件，不依赖云端访问本机 Rus
 
 无相关依据返回“未找到相关依据”。只有部分依据时明确回答范围。服务故障返回可识别的错误，不能伪装成知识库无依据。知识库中的命令或提示语作为文档内容处理，不成为系统指令。
 
-前端使用 useChat 与所锁定版本的 UI Message Stream；验证文本增量、结构化来源、完成、错误、停止与断开连接。推理过程不作为制度证据，也不要求模型输出内部思考过程。
+前端使用原生 fetch 读取 start/phase/delta/done 事件；已验证文本增量、结构化来源、完成、错误、停止与断开连接。推理过程不作为制度证据，也不要求模型输出内部思考过程。
 
 ## 8. 图谱范围与多跳证据
 
@@ -157,7 +162,7 @@ MinerU 通过其云端上传协议接收文件，不依赖云端访问本机 Rus
 
 图谱任务存 processing_jobs，以 source_job_id 绑定已完成的导入结果。checkpoint 保存已校验的抽取结果与 manifest/hash，Neo4j 按 graph_job_id 幂等投影；投影失败重放原结果。页面使用 ECharts 展示局部图，每次最多 80 个节点，保留搜索、展开/收起和来源查看；不强制每份文档独占一张图。
 
-图谱检索使用参数化、受控的 2～3 跳 Cypher；限制路径类型与候选数量。取得的来源切片回查 PG，合并基础检索候选后精排，再生成答案。金额和时长比较由程序执行；图谱路径长度不等于推理正确性。
+图谱检索使用参数化、受控的两跳 Cypher；限制路径类型与候选数量。取得的来源切片回查 PG，合并基础检索候选后精排，再生成答案。金额和时长比较由程序执行；图谱路径长度不等于推理正确性。
 
 两个首版演示：
 
@@ -168,35 +173,38 @@ MinerU 通过其云端上传协议接收文件，不依赖云端访问本机 Rus
 
 ## 9. 页面与最小接口
 
-当前状态（2026-11-14）：前端原型已完成用户评审，作为后续界面与交互基准。FastAPI 基础工程、四项独立基础设施、8 表迁移和真实约束测试已完成，详见[后端基础记录](dev-notes/backend-foundation.md)及[数据库设计](superpowers/specs/2026-11-14-database-design.md)。公开 API 目前为健康检查；问答、上传处理和图谱页面继续使用演示数据，真实业务链路按后续任务接入。前端验证与局限见[原型记录](dev-notes/frontend-prototype.md)。
+当前状态（2026-11-15）：真实入库、问答、图谱、多跳、联网和追踪已接入，文档支持软删除，历史引用保留。后端接口仍使用固定 version/job 标识，保证来源稳定；前端按单文件管理。详细验收见 [交付收尾](dev-notes/delivery-wrapup.md)。
 
-顶部导航区分问答工作台、文档管理和知识图谱，左侧随页面显示对应工具：问答使用新建会话与历史会话；文档管理使用分类与处理状态筛选，正文区集中搜索、上传和分页列表；图谱使用关联场景、节点搜索与类型筛选。问答范围在输入框底部按需选择，默认全部知识库。右侧为原文溯源，窄屏侧栏与来源面板改为抽屉。文档详情可查看原文和示例片段，图谱节点可打开对应证据。
+顶部导航为问答工作台、文档管理和知识图谱。会话首次发送后持久化，历史支持删除；文档有搜索、处理状态筛选、上传、查看、删除和失败重试。问答默认检索全部有效知识库，限定文档范围暂缓。来源面板展示正文、原件、实际索引切块；图谱支持搜索、类型筛选、展开/收起及来源核对。当前只验收电脑端，不做手机适配。
 
 | 接口 | 目的 |
 | --- | --- |
 | GET /api/health/live、/api/health/ready | 进程与依赖检查 |
+| POST /api/documents/check-duplicate | 检查有效库全部历史版本的文件指纹，返回重复文档/版本；正式上传仍需服务端复查 |
 | POST /api/documents | 新建上传，客户端沿用稳定 document_id；返回 document_id、version_id、job_id |
 | POST /api/documents/{document_id}/versions | 显式上传新版本，同文档同 hash 复用既有版本 |
-| GET /api/documents | 元数据列表，不返回全文 |
+| GET /api/documents | 已实现：offset/limit 元数据列表，不返回全文 |
+| GET /api/documents/{document_id}/versions | 已实现：原件版本列表与固定版本读取地址 |
 | GET /api/processing-jobs/{job_id} | 导入/图谱的处理阶段、状态、明确错误 |
 | POST /api/processing-jobs/{job_id}/retry | 受控重试，检查状态和次数上限 |
 | GET /api/documents/{document_id} | 文档元数据、正文与图谱状态 |
-| PATCH /api/documents/{document_id}、DELETE /api/documents/{document_id} | 修改标题/分类、软删除 |
+| DELETE /api/documents/{document_id} | 已实现：软删除，活跃任务禁止，历史固定来源保留 |
 | GET /api/document-versions/{version_id}/file | 固定版本的原件预览或下载，历史引用使用此接口 |
 | GET /api/processing-jobs/{job_id}/assets/{asset_id} | 固定导入结果的解析图片等资源 |
 | GET /api/chunks/{chunk_id} | 引用正文与定位信息 |
 | POST /api/sessions、GET /api/sessions | 新建与查询历史会话 |
 | GET /api/sessions/{session_id} | 恢复会话消息和来源 |
-| PATCH /api/sessions/{session_id}/scope | 修改范围，带 expected_scope_revision |
-| POST /api/chat | AI SDK 流式问答，接收 session_id、client_request_id、scope_revision、text |
-| POST /api/chat-messages/{message_id}/stop | 停止助手消息对应的生成请求 |
-| GET /api/graph?document_id=... | 局部节点、关系、来源、fingerprint 与 has_more |
+| DELETE /api/sessions/{session_id} | 从历史中移除会话 |
+| POST /api/chat/stream | POST SSE，接收 session_id、client_request_id、text，可选 web_search/retry_attempt |
+| POST /api/chat | 同步问答接口 |
+| POST /api/chat/stop | 停止对应消息/尝试的生成请求 |
+| POST /api/graph/build、GET /api/graph?document_id=... | 图谱异步任务、节点/关系/来源与处理状态 |
 
 无账号体系；此版本按本地演示应用部署，不把 session_id 描述成身份认证。
 
 ## 10. 验证与两天安排
 
-周六上午：依赖与基础设施、MinerU PDF/DOCX 真实解析、AI SDK 流式协议验收。周六下午：异步导入、切片、检索、问答、引用定位。
+周六上午：依赖与基础设施、MinerU PDF/DOCX 真实解析、SSE 流式协议验收。周六下午：异步导入、切片、检索、问答、引用定位。
 
 周日上午：短期追问、50 题回归、拒答与引用问题修复。核心闭环验收后，周日下午实现受控图谱与两个多跳示例，再整理交付资料。
 
@@ -214,4 +222,4 @@ MinerU 通过其云端上传协议接收文件，不依赖云端访问本机 Rus
 - 图谱关系可溯源；两个多跳示例每一步有依据，图谱失败不破坏基本 RAG。
 - 用相同问题、相同模型和检索预算比较基础 RAG 与图谱扩展的证据召回、答案、引用、耗时及调用量。不预设图谱必然提高分数。
 
-最终交付：可运行源码、环境变量示例、锁文件、启动步骤、设计说明、校准后的评测集与逐题结果、3～5 分钟演示脚本。实际未运行的模型集成与未解决问题必须在结果中明确标注。
+当前交付：可运行源码、环境变量示例、锁文件、启动步骤、设计说明、20 题选题与逐题结果、15～20 分钟演示脚本。原定完整 50 题暂缓，录屏前按脚本彩排。实际未运行的模型集成与未解决问题必须在结果中明确标注。
