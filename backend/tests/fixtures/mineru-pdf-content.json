@@ -1,0 +1,27 @@
+[
+  {
+    "type": "text",
+    "text": "FINANCE / EXPENSES",
+    "bbox": [
+      93,
+      99,
+      250,
+      114
+    ],
+    "page_idx": 0
+  },
+  {
+    "type": "table",
+    "img_path": "images/f7dfc1970991e2dacc22832f2d3b5994a00a5d516331a0f4233ad765242d02c2.jpg",
+    "table_caption": [],
+    "table_footnote": [],
+    "table_body": "<table><tr><td>制度编号</td><td>YL-FIN-001</td></tr><tr><td>版本号</td><td>1.1</td></tr><tr><td>发布日期</td><td>2026年11月13日</td></tr><tr><td>生效日期</td><td>2026年11月16日</td></tr><tr><td>归口部门</td><td>财务部</td></tr><tr><td>适用范围</td><td>与公司建立劳动关系的员工;实习人员按实习协议或公司书面通知明确的范围参照执行</td></tr></table>",
+    "bbox": [
+      86,
+      226,
+      838,
+      422
+    ],
+    "page_idx": 0
+  }
+]

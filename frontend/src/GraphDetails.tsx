@@ -1,0 +1,18 @@
+import {FileText,LoaderCircle} from 'lucide-react';
+import {InlineMarkdown} from './MarkdownContent';
+import type {ChunkSource} from './document-types';
+import type {GraphEvidenceDto,GraphJob} from './graph-api-types';
+
+export const graphPhaseNames:Record<string,string>={queued:'等待生成',extracting:'抽取关系',validating:'校验原文',projecting:'写入图谱',done:'已生成'};
+export function GraphJobList({jobs,busy,onRetry,onDocument}:{jobs:GraphJob[];busy:boolean;onRetry:(id:string)=>void;onDocument:(id:string)=>void}){
+  if(!jobs.length)return null;
+  const active=jobs.filter(job=>['queued','running'].includes(job.status)).length;
+  const ready=jobs.filter(job=>job.status==='ready').length;
+  const failed=jobs.filter(job=>job.status==='failed').length;
+  return <details className="graph-job-details" open={active>0||failed>0}><summary><span>文档图谱状态</span><small>已生成 {ready} / {jobs.length}{active?` · 处理中 ${active}`:''}{failed?` · 失败 ${failed}`:''}</small></summary><ul>{jobs.map(job=><li key={job.document_id}><div className="graph-job-heading"><strong>{job.title}</strong><span className={`graph-job-state state-${job.status}`}>{['queued','running'].includes(job.status)&&<LoaderCircle size={12} className="spinning"/>}{job.status==='not_generated'?'尚未生成':job.status==='failed'?'生成失败':graphPhaseNames[job.stage]??job.stage}</span></div>{job.status!=='not_generated'&&<p>已处理 {job.processed_units} / {job.total_units} 条款 · {job.rule_count} 条规则 · {job.relation_count} 条业务关系</p>}{job.has_previous&&<p className="graph-task-note">当前保留上次结果，新的结果就绪后更新。</p>}{job.needs_update&&job.status==='ready'&&<p className="graph-task-note">有新的文档关联待补全。</p>}{job.rejected_count>0&&<p className="graph-task-warning">{job.rejected_count} 条抽取结果未通过校验，已跳过。</p>}{job.unit_limit_reached&&<p className="graph-task-warning">本次已到条款处理上限，图谱覆盖部分原文。</p>}{job.error&&<p className="graph-task-error" role={job.status==='failed'?'alert':'status'}>{job.error.message}</p>}<div className="graph-job-actions">{job.status==='ready'&&<button type="button" className="text-button" onClick={()=>onDocument(job.document_id)}>查看本制度图谱</button>}{job.status==='failed'&&job.error?.retryable&&job.attempt_no<job.max_attempts&&<button type="button" className="text-button" disabled={busy} onClick={()=>onRetry(job.document_id)}>重试生成</button>}{job.status==='failed'&&job.attempt_no>=job.max_attempts&&<span>已达重试上限，请先检查失败原因。</span>}</div></li>)}</ul></details>;
+}
+export function GraphEvidence({ids,sources,onSource}:{ids:string[];sources:Record<string,GraphEvidenceDto>;onSource:(source:ChunkSource,tab?:'passage'|'indexed')=>void}){
+  const records=ids.flatMap(id=>sources[id]?[{id,...sources[id]}]:[]);
+  if(!records.length)return null;
+  return <div className="graph-evidence-records"><p className="graph-evidence-caption">原文依据 · {records.length} 处</p>{records.map((evidence,index)=><details className="graph-evidence-record" key={evidence.id} open={index===0}><summary><FileText size={13}/><span>{evidence.source.document_title} · 切块 {evidence.source.ordinal+1}</span><small>{evidence.source.page_start!==null?`第 ${evidence.source.page_start} 页`:'按章节定位'}</small></summary><div><p className="graph-evidence-heading"><InlineMarkdown text={evidence.source.heading_path.join(' / ')||'正文'}/></p><p className="graph-evidence-quote">{evidence.quote}</p>{evidence.conditions.length>0&&<div className="graph-evidence-conditions"><strong>适用条件与限制</strong><ul>{evidence.conditions.map((condition,i)=><li key={i}>{condition}</li>)}</ul></div>}<div className="graph-evidence-actions"><button className="text-button" onClick={()=>onSource(evidence.source,'passage')}>查看原文</button><button className="text-button" onClick={()=>onSource(evidence.source,'indexed')}>查看切块</button></div></div></details>)}</div>;
+}

@@ -86,7 +86,7 @@ erDiagram
 | id、document_id、version_no | 原件版本身份及上传顺序；同文档 version_no 唯一 |
 | version_label | 原件标注的版本，如 1.1；与上传序号分开 |
 | original_filename、format、size_bytes | 文件名、pdf/docx/md、字节数 |
-| file_sha256 | 同文档 hash 唯一；不同逻辑文档可使用相同字节 |
+| file_sha256 | 数据库保证同文档 hash 唯一；上传服务另按全库文件指纹检查，阻止有效文档间重复导入 |
 | file_ref | JSONB：bucket、object_key、mime_type；不保存临时签名 URL |
 | source_metadata | JSONB：归口部门、原文日期等有 schema 的来源元数据 |
 | active_import_job_id | 本版本当前可用的导入结果；重建中保留旧指针 |
@@ -271,7 +271,10 @@ queued 的 stage=queued；ready 的 stage=done。failed/canceled 保留当时 st
 
 - 新建上传：客户端为这次新文档生成并保留一个 document_id，POST /api/documents 提交文件及标题/分类。请求丢失后重试使用同一 ID。
 - 已有相同 ID 与相同原件 hash 时，返回既有版本与相同配置的已有任务；同一 ID 的新建请求携带不同文件则返回 409，不暗中创建新版本或覆盖文件。元数据变化使用独立 PATCH。
-- 更新文件：显式 POST /api/documents/{document_id}/versions。同文档同 hash 复用版本，不同 hash 分配新 version_no。不同 document_id 可以保存内容相同的文件。
+- 新增前检查：POST /api/documents/check-duplicate 接收 file_sha256，查询未软删除文档的全部历史版本，返回 duplicate 和既有文档/版本身份。文件改名不改变指纹；跨格式、重新导出或仅正文相同的不同字节不做语义去重。重复文件跳过导入，展示已有文档信息；首版不提供绕过去重的“仍然新建”。同批次同指纹只保留第一份。
+- 更新文件：显式 POST /api/documents/{document_id}/versions。同文档同 hash 复用版本；不同 hash 也先做全库检查，若命中其他有效文档则返回已有文档，不创建版本，否则分配新 version_no。已软删除文档不占用有效库的指纹，可以重新导入；历史数据仍保留。
+- 预检查只是用户反馈。正式上传时服务必须用实际接收字节重新计算 SHA-256，在 READ COMMITTED 事务中先调用 lock_and_check_file，以指纹前 64 位取得 pg_advisory_xact_lock，锁保持至文档/版本/任务登记提交或回滚。相同文件的所有写入入口遵循此边界；命中即复用返回，不写新文档、版本或任务，也不发起解析/向量调用。新建接口同一 ID 的不同文件冲突检查优先，继续返回 409。
+- 前端和接口查询故障均明确报错，不能按“未找到重复”继续。新增 ix_versions_file_sha256 非唯一索引支持跨文档查询；数据库保留原有同文档唯一约束以兼容历史记录，全库上传规则由共享事务边界执行。
 - 创建或复用 job 时锁住版本行，普通重复上传复用相同 config 的 ready/活动 job；强制重新解析/索引才分配新 generation_no。
 - 若相同配置仅有 failed/canceled 任务，普通重复上传返回既有终态，不自动创建任务或重置尝试次数；可恢复的 failed 走显式 retry，达到上限或需要重新构建时才创建新 generation。
 - 原件先保存到新 RustFS 对象键，再在 PG 事务内创建文档/版本/任务。PG 失败产生的未引用对象按隔离前缀和保留期清理，不覆盖旧原件。
@@ -343,6 +346,7 @@ stateDiagram-v2
 | 数据库直接约束 | 服务必须校验 |
 | --- | --- |
 | 当前版本属于本 document | 指向可用版本，版本发布先后正确 |
+| 同文档原件 hash 唯一 | 上传入口服务端重新计算文件指纹、全库检查，并持有同指纹事务锁直至登记完成 |
 | active import 指针属于本 version | 目标类型 import、状态 ready、产物完整 |
 | graph source_job 与本任务同 version | source_job 类型为 import，已完成且来源切片合法 |
 | chunk 的 job/version/profile/dimension 组合一致 | blocks/locators 真正对应原文；向量由正确模型产生 |
@@ -362,7 +366,7 @@ DDL 包含文档按时间/分类的游标分页、版本号和 hash 去重、任
 | --- | --- |
 | 文档列表、分类、搜索 | documents 与当前 version/job 摘要；category 为字符串，分类计数 GROUP BY category；列表不取正文/向量 |
 | 当前可问答 + 更新处理中 | current_version/active_import 与 latest_processing 分开返回，不能用一个状态互相覆盖 |
-| 上传与失败重试 | POST /api/documents；POST /api/documents/{id}/versions；GET /api/processing-jobs/{id}；POST /api/processing-jobs/{id}/retry |
+| 上传与失败重试 | POST /api/documents/check-duplicate；POST /api/documents；POST /api/documents/{id}/versions；GET /api/processing-jobs/{id}；POST /api/processing-jobs/{id}/retry |
 | 正文、解析片段与 PDF | 按 active import 读 document_contents/chunks；GET /api/document-versions/{id}/file 始终打开该版本原件 |
 | 新建/历史会话与范围选择 | POST/GET /api/sessions；PATCH /api/sessions/{id}/scope（带 expected_scope_revision） |
 | 发送与停止生成 | POST /api/chat（session_id、client_request_id、scope_revision、text）；POST /api/chat-messages/{id}/stop，id 为助手消息 ID |

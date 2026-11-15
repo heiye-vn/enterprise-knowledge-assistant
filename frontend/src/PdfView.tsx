@@ -5,7 +5,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-export default function PdfView({ url, page }: { url: string; page: number }) {
+export default function PdfView({ url, page, onPageCount }: { url: string; page: number; onPageCount?: (count: number) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(360);
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function PdfView({ url, page }: { url: string; page: number }) {
     return () => observer.disconnect();
   }, []);
   return <div className="pdf-canvas" ref={container}>
-    <Document file={url} loading={<p className="empty-note">正在打开 PDF 原件…</p>} error={<p className="empty-note">PDF 暂时无法打开，请使用“打开原件”。</p>}>
+    <Document file={url} onLoadSuccess={({numPages}) => onPageCount?.(numPages)} loading={<p className="empty-note">正在打开 PDF 原件…</p>} error={<p className="empty-note">PDF 暂时无法打开，请使用“在新窗口打开原件”。</p>}>
       <Page pageNumber={page} width={width} renderAnnotationLayer={false} />
     </Document>
   </div>;

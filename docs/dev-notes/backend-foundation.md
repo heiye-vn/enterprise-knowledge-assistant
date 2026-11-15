@@ -1,6 +1,6 @@
 # 后端基础与数据库落地记录
 
-日期：2026-11-14。依据 [8 表设计](../superpowers/specs/2026-11-14-database-design.md) 和 [本阶段执行清单](../superpowers/plans/2026-11-14-backend-foundation.md)，完成用户确认的四步。前端原型仍使用固定演示数据；本阶段没有把基础代码称作完整上传、RAG 或图谱抽取服务。
+日期：2026-11-14。凭证后续已按用户要求改为简易本地登录，见根 README 的登录表；以下初始化随机凭证说明保留为基础阶段记录。依据 [8 表设计](../superpowers/specs/2026-11-14-database-design.md) 和 [本阶段执行清单](../superpowers/plans/2026-11-14-backend-foundation.md)，完成用户确认的四步。前端原型仍使用固定演示数据；本阶段没有把基础代码称作完整上传、RAG 或图谱抽取服务。
 
 ## 1. 已落实内容
 

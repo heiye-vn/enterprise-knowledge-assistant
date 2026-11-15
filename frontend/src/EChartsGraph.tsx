@@ -53,8 +53,8 @@ export default forwardRef<GraphChartHandle, Props>(function EChartsGraph({ view,
       });
     });
     const observer = new ResizeObserver(() => {
-      instance.resize({ animation: { duration: 0 } });
-      controller.requestAutoFit();
+      const element = host.current;
+      if (element) controller.resize(element.clientWidth, element.clientHeight);
     });
     observer.observe(host.current);
     return () => { controller.dispose(); viewport.current = null; observer.disconnect(); instance.dispose(); chart.current = null; };

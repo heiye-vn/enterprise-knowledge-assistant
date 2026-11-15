@@ -41,7 +41,7 @@ export function buildGraphOption(view: GraphView, reducedMotion = false): Knowle
           id: node.id, name: node.title, category: kind.label, symbol: kind.symbol,
           symbolSize: node.kind === 'document' ? [36, 30] : 30,
           itemStyle: { color: kind.color, borderColor: '#ffffff', borderWidth: 3, shadowBlur: 8, shadowColor: `${kind.color}25` },
-          label: { show: view.nodes.length <= 24 || view.matchedIds.includes(node.id) },
+          label: { show: node.kind === 'document' || view.nodes.length <= 24 || view.matchedIds.includes(node.id) },
         };
       }),
       links: view.edges.map(edge => ({

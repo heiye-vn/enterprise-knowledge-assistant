@@ -1,0 +1,29 @@
+[
+  {
+    "type": "image",
+    "img_path": "images/0008b022134e97f3a67f62efbf2e684c69f93b9ae0011e9716752be376f3276e.jpg",
+    "image_caption": [
+      "Figure 1. Purchase approval workflow and required evidence"
+    ],
+    "image_footnote": [],
+    "content": "",
+    "bbox": [
+      110,
+      246,
+      888,
+      568
+    ],
+    "page_idx": 0
+  },
+  {
+    "type": "header",
+    "text": "Internal process documentation",
+    "bbox": [
+      70,
+      57,
+      496,
+      84
+    ],
+    "page_idx": 0
+  }
+]
