@@ -1,0 +1,126 @@
+[
+  {
+    "block_id": "approval-context",
+    "type": "text",
+    "heading_path": [
+      "第三章 申请、审批与报销流程"
+    ],
+    "page_start": null,
+    "page_end": null,
+    "text": "第八条 费用审批权限。一般员工费用按单笔申请或同一事项预计总额计算，不得通过拆分订单、拆分人员或拆分项目规避审批。采购申请、供应商选择、采购合同及采购订单等采购决策，统一按《采购管理制度》的金额分档和审批链执行，不适用本条一般费用审批表；采购完成后的员工垫付报销，按本制度办理报销资料和财务审核，但不得以报销审批替代采购审批或重复审批采购决策。"
+  },
+  {
+    "block_id": "approval-table",
+    "type": "table",
+    "heading_path": [
+      "第三章 申请、审批与报销流程"
+    ],
+    "page_start": null,
+    "page_end": null,
+    "rows": [
+      [
+        {
+          "text": "单笔/单事项预计金额",
+          "header": true,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "审批链",
+          "header": true,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "备注",
+          "header": true,
+          "colspan": 1,
+          "rowspan": 1
+        }
+      ],
+      [
+        {
+          "text": "≤1,000元",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "直属主管",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "预算内日常费用。",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        }
+      ],
+      [
+        {
+          "text": ">1,000元且≤5,000元",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "直属主管 → 部门负责人",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "部门负责人确认业务必要性。",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        }
+      ],
+      [
+        {
+          "text": ">5,000元且≤20,000元",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "直属主管 → 部门负责人 → 财务经理",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "财务复核预算、标准和费用归属。",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        }
+      ],
+      [
+        {
+          "text": ">20,000元",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "直属主管 → 部门负责人 → 财务经理 → 总经理",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        },
+        {
+          "text": "须附费用测算或报价依据。",
+          "header": false,
+          "colspan": 1,
+          "rowspan": 1
+        }
+      ]
+    ],
+    "captions": [],
+    "footnotes": [],
+    "text": "单笔/单事项预计金额 | 审批链 | 备注\n≤1,000元 | 直属主管 | 预算内日常费用。\n>1,000元且≤5,000元 | 直属主管 → 部门负责人 | 部门负责人确认业务必要性。\n>5,000元且≤20,000元 | 直属主管 → 部门负责人 → 财务经理 | 财务复核预算、标准和费用归属。\n>20,000元 | 直属主管 → 部门负责人 → 财务经理 → 总经理 | 须附费用测算或报价依据。"
+  }
+]

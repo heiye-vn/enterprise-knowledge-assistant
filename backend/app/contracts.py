@@ -22,8 +22,10 @@ class SessionScope(BaseModel):
 
 def import_display_status(status: str, stage: str) -> str:
     """Map the unified import state to the approved prototype's progress labels."""
-    if status == "queued" and stage == "queued":
-        return "queued"
+    if status == "queued" and stage in {"queued", "parsing", "chunking", "embedding", "publishing"}:
+        if stage == "publishing":
+            return "embedding"
+        return stage
     if status == "ready" and stage == "done":
         return "ready"
     if status in {"failed", "canceled"}:

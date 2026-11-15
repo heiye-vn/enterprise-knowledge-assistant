@@ -65,7 +65,9 @@ class DocumentVersion(Base):
     __table_args__ = (
         ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="RESTRICT"),
         CheckConstraint("version_no > 0"),
-        CheckConstraint("format IN ('pdf', 'docx', 'md')"),
+        CheckConstraint(
+            "format IN ('pdf', 'docx', 'md', 'png', 'jpg')", name="document_versions_format_check"
+        ),
         CheckConstraint("size_bytes > 0"),
         CheckConstraint("file_sha256 ~ '^[0-9a-f]{64}$'"),
         CheckConstraint("jsonb_typeof(file_ref) = 'object'"),
@@ -73,6 +75,7 @@ class DocumentVersion(Base):
         CheckConstraint("next_generation_no > 0"),
         UniqueConstraint("document_id", "version_no"),
         UniqueConstraint("document_id", "file_sha256"),
+        Index("ix_versions_file_sha256", "file_sha256"),
         UniqueConstraint("id", "document_id"),
         ForeignKeyConstraint(
             ["active_import_job_id", "id"],

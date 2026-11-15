@@ -83,10 +83,6 @@ def complete_answer(
     numbers = [item.citation_no for item in inputs]
     if len(numbers) != len(set(numbers)):
         raise ValueError("引用编号不能重复")
-    if set(numbers) != {int(n) for n in re.findall(r"\[(\d+)\]", content)}:
-        raise ValueError("正文引用编号与最终来源不一致")
-    if answer_kind != "refused" and not inputs:
-        raise ValueError("有据回答至少需要一条引用")
     with db.begin_nested():
         message = db.scalar(
             select(ChatMessage)
@@ -101,6 +97,24 @@ def complete_answer(
         if message.status not in {"queued", "retrieving", "generating"}:
             raise ValueError("消息已进入终态")
         snapshot = message.request_snapshot or {}
+        if snapshot.get("answer_mode") in {"general", "clarify"}:
+            if inputs or snapshot.get("documents"):
+                raise ValueError("通用回答或澄清不能冒用知识库来源")
+        elif snapshot.get("answer_mode") == "web":
+            web = (snapshot.get("details") or {}).get("web") or {}
+            used = set(web.get("used_numbers", []))
+            available = {item.get("number") for item in web.get("results", [])}
+            if inputs or snapshot.get("documents") or not used.issubset(available):
+                raise ValueError("网页来源不能冒用知识库引用")
+            if used != {int(n) for n in re.findall(r"\[(\d+)\]", content)}:
+                raise ValueError("正文引用与网页来源不一致")
+            if answer_kind != "refused" and not used:
+                raise ValueError("联网回答缺少已验证网页来源")
+        else:
+            if set(numbers) != {int(n) for n in re.findall(r"\[(\d+)\]", content)}:
+                raise ValueError("正文引用编号与最终来源不一致")
+            if answer_kind != "refused" and not inputs:
+                raise ValueError("有据回答至少需要一条引用")
         allowed = {
             (item.get("document_id"), item.get("version_id"), item.get("job_id"))
             for item in snapshot.get("documents", [])

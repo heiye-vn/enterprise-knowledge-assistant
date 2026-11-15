@@ -1,0 +1,22 @@
+[
+  {
+    "type": "text",
+    "text": "**OPERATIONS / PROCUREMENT**",
+    "page_idx": 0
+  },
+  {
+    "type": "table",
+    "table_caption": [],
+    "table_body": "<table><tr><td><p><strong>制度编号</strong></p></td><td><p>YL-OPS-003</p></td></tr><tr><td><p><strong>版本号</strong></p></td><td><p>1.1</p></td></tr><tr><td><p><strong>发布日期</strong></p></td><td><p>2026年11月13日</p></td></tr><tr><td><p><strong>生效日期</strong></p></td><td><p>2026年11月16日</p></td></tr><tr><td><p><strong>归口部门</strong></p></td><td><p>采购与行政部</p></td></tr><tr><td><p><strong>适用范围</strong></p></td><td><p>公司各部门发起的货物、软件、服务及外包采购事项；低值零星消耗品例外按第二条执行</p></td></tr></table>",
+    "page_idx": 0
+  },
+  {
+    "type": "list",
+    "list_items": [
+      "- 本文件按“制度条款—操作流程—结构化表格”组织，适用于企业知识库文档解析和问答测试。",
+      "- 回答制度问题时，应优先引用对应条款和表格；金额、时限、审批角色应结合具体适用条件判断。",
+      "- 本文件中的公司名称、人员角色、金额、期限和流程均为虚构测试数据。"
+    ],
+    "page_idx": 0
+  }
+]
