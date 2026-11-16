@@ -1,6 +1,12 @@
 from pathlib import Path
 from typing import Literal
 
+"""
+AliasChoices: 支持多个字段别名，一个字段支持多个输入名称
+SecretStr: 保护敏感字符串，避免意外泄露
+BaseSettings: 从环境变量、配置文件等读取数据
+ConfigDict: 配置数据模型的行为
+"""
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
