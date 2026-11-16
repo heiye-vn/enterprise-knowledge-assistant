@@ -1,6 +1,6 @@
 # Tavily 联网查询与 LangSmith 链路追踪
 
-日期：2026-11-15。用户已确认联网工具范围，并在私有 `.env` 配置 Tavily、LangSmith。本轮单代理执行，沿用当前目录，保留正式语料、已有展示会话、五份就绪文档和 Neo4j 图谱；未提交 Git。
+联网使用 Tavily 直接 API，链路追踪使用 LangSmith REST API；两者可选，不要求引入 LangChain 或 MCP。配置示例见根 [README](../../README.md#2-配置模型)。
 
 ## 联网查询
 
@@ -22,33 +22,16 @@ Tavily Search 使用一次 basic 请求，最多五条、默认二十秒超时�
 
 每次聊天尝试一个 chat 根链路，子节点包括 intent、实际意图模型调用、knowledge.retrieve、Embedding / Rerank 等模型请求、tavily.search、answer 和实际流式调用。仅执行过的阶段进入 trace；没有查询网页的分支不会伪造工具节点。
 
-默认上传严格白名单元数据：请求/会话身份、尝试编号、路径、模型与提供方、耗时、Token 数、数量、停止/错误状态。默认模式 inputs 为空，outputs 仅含状态与 usage_metadata。用户追加要求后新增 KH_LANGSMITH_RECORD_CONTENT：开启时记录根问题/答案、意图结果、检索候选与分数、当前来源片段、模型 messages/choices 及 Tavily query/results；配置密钥和常见凭证字段统一脱敏。单次 record 上限 120,000 字符，整个 trace 的正文预算 500,000 字符。公开示例默认关闭，当前私有环境按用户要求开启。Token 数据来自真实模型 usage，不根据文本长度估计。LangSmith 也可能聚合父节点的 Token，统计时避免再次累加父子值。
+默认上传严格白名单元数据：请求/会话身份、尝试编号、路径、模型与提供方、耗时、Token 数、数量、停止/错误状态。默认模式 inputs 为空，outputs 仅含状态与 usage_metadata。KH_LANGSMITH_RECORD_CONTENT：开启时记录根问题/答案、意图结果、检索候选与分数、当前来源片段、模型 messages/choices 及 Tavily query/results；配置密钥和常见凭证字段统一脱敏。单次 record 上限 120,000 字符，整个 trace 的正文预算 500,000 字符。公开示例默认关闭；展示正文前需在自己的环境显式开启。Token 数据来自真实模型 usage，不根据文本长度估计。LangSmith 也可能聚合父节点的 Token，统计时避免再次累加父子值。
 
 一个后台导出线程和有界队列负责发送；追踪关闭或未配 Key 时不发送请求，导出失败只记录脱敏错误，不改变业务结果。Trace ID 随问答详情保存，便于到自己的项目核对。平台接收与查询存在延迟，首次读取可能返回 404，稍后才能查询到，不把队列接收等同于平台已可见。
 
-网络实测：千问仍直接连接；Tavily 与 LangSmith 本机直接连接出现 TLS EOF，继承环境代理后认证与实际调用正常。新增 KH_TAVILY_TRUST_ENV 与 KH_LANGSMITH_TRUST_ENV（默认 true），不更改全局代理或既有模型网络配置，也不关闭 TLS 校验。其他环境可按实际网络调整。
-
-## 真实验收
-
-- Tavily 已真实返回 Python 官方发布页等结果；API 流式回答使用三处有效网页引用，普通模式没有工具结果。
-- 浏览器开启开关后，中文回答确认 Python 3.14.0 正式版于 2025 年 10 月 7 日发布，附两处来源，包含 Python.org 官方发布页；搜索返回五条、最终引用两条，工具耗时约 1.45 秒，整体约 4.23 秒。此为单次记录，不是性能基准。
-- “本公司住房补贴多少钱”在开启联网时仍走 knowledge，无外部来源并明确缺少知识库依据。
-- 联网答案首批增量后停止，保存 stopped 草稿，刷新查询仍无有效网页或知识库引用。
-- LangSmith API 实际读取到 chat 根记录及五个子记录：意图、意图模型、Tavily 工具、回答、回答模型，父子身份一致。
-- 实测意图模型 usage 为输入 472 / 输出 19，回答流为输入 2409 / 输出 53；LangSmith 对应 LLM 节点显示相同 Token 数。这是首版元数据模式的验收；开启正文后追加了新的真实知识/联网问答，核对根问题、最终答案、检索 documents/trace、工具结果与模型 inputs/outputs。
-- 浏览器检查默认关闭、发送时开关禁用、中文答案、有效网页链接、刷新恢复、查询时间与 Trace ID。截图保存到 `docs/images/web-answer.jpg`、`web-details.jpg`。
-
-集成测试显式关闭真实 LangSmith 导出；修复测试继承私有开关而将模拟链路写入演示项目的问题。已存在的测试 trace 和元数据 trace 不自动补全，新的真实验收链接可按 Trace ID 定位。
-
-临时 API 验收会话按登记身份清理，保留一个中文联网展示会话；原有展示会话保留。脱敏明细位于忽略目录 `.local/web-qa/`，不把私有 Key 写入记录。
+KH_TAVILY_TRUST_ENV 与 KH_LANGSMITH_TRUST_ENV 默认 true，分别控制搜索和追踪是否继承环境代理。它们与模型网络配置独立，按当前电脑和容器网络调整，保持 TLS 校验开启。详见 [网络与恢复](model-network.md)。
 
 ## 验证与边界
 
-- 完整后端 289 项（含真实本地基础设施、模拟搜索/模型）、前端 61 项测试通过；Ruff、迁移检查和前端构建通过。
-- 测试覆盖结果数/大小、URL、认证/超时、空结果、网页引用、企业事实保护、停止早于生成、重试与重放参数、追踪脱敏和平台故障隔离。
-- API 与 Worker / Beat 更新到本轮代码；依赖未新增。私有 `.env` 保留原有配置，仅按用户要求新增 KH_LANGSMITH_RECORD_CONTENT=true；公开示例补充服务、网络及正文开关。
-- 本轮真实在线回答模型为当前配置的千问；第三方接口继续走已有统一模型边界，未切换私有提供方配置。
+集成测试关闭真实 LangSmith 导出，避免模拟链路进入实际项目。相关回归包括 `backend/tests/test_web_search.py`、`test_observability.py` 和前端 `chat-message.test.tsx`。真实联网案例、来源与问题报告见 [问答验收](../../eval/README.md)。
 
-采用直接 Tavily API，MCP 客户端仍未实现。该 API 已满足一个只读公共工具的演示需求，暂不额外部署 RPC 服务或工具管理平台。剩余优先项为系统问答评测及 15～20 分钟演示脚本。
+采用直接 Tavily API，不将其称作 MCP 接入。LangSmith 已存在的元数据 trace 不会因后来开启正文记录而自动补全，应对照新请求的 Trace ID 查看。
 
 参考：[Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search)、[LangSmith REST 追踪](https://docs.langchain.com/langsmith/trace-with-api)。

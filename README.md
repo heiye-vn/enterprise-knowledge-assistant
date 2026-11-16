@@ -293,7 +293,7 @@ docker compose up -d
 
 Windows 遇到端口占用，可用 `Get-NetTCPConnection -LocalPort 5174,8014,5544,6384,9014,9015,7484,7694 -ErrorAction SilentlyContinue` 查看占用进程。宿主机代理地址 `127.0.0.1` 在容器中指向容器自己；需要代理的服务应按实际网络单独配置，容器访问宿主机可使用 `host.docker.internal`。不要直接复制另一台电脑的代理端口。
 
-常见问题：上传后一直等待时检查 Worker / Beat；模型报错时检查对应提供方、区域、额度和代理；首次构建镜像失败时检查容器拉取镜像及访问 Python 包源的网络；反向代理需关闭 SSE 缓冲。具体诊断见[开发记录](docs/dev-notes/README.md)。
+常见问题：上传后一直等待时检查 Worker / Beat；模型报错时检查对应提供方、区域、额度和代理；首次构建镜像失败时检查容器拉取镜像及访问 Python 包源的网络；反向代理需关闭 SSE 缓冲。具体诊断见[开发文档](docs/dev-notes/README.md)。
 
 ## 验证与开发
 
@@ -310,7 +310,7 @@ pnpm --dir frontend test
 pnpm --dir frontend build
 ```
 
-集成测试会初始化独立的 `knowledge_assistant_test` 数据库；首次运行需要本地账号具备建库权限。流式测试覆盖增量持久化、引用校验、停止、重新生成、旧尝试隔离、过期恢复和阻塞 TLS 读取的取消。真实模型与浏览器验收另见[流式验收记录](docs/dev-notes/streaming-readme.md)。
+集成测试会初始化独立的 `knowledge_assistant_test` 数据库；首次运行需要本地账号具备建库权限。流式测试覆盖增量持久化、引用校验、停止、重新生成、旧尝试隔离、过期恢复和阻塞 TLS 读取的取消。流式事件、停止和恢复规则见[流式说明](docs/dev-notes/streaming-readme.md)。
 
 交付前已运行 20 个真实问答案例，覆盖制度数值边界、拒答、追问、多跳、图片和联网；仅向 API 发送问题，标准答案保持离线。修复后整轮基本检查为 **19/20**，剩余一题修复数字引用格式兼容后单独复验通过。逐题核对由开发助手完成，不等同于独立人工测评或完整 50 题准确率。报告、完整回答和重跑说明见 [问答验收](eval/README.md)。
 
@@ -319,7 +319,7 @@ pnpm --dir frontend build
 uv run --project backend python backend/scripts/evaluate_delivery.py --output eval/reports/my-run
 ```
 
-录屏可直接使用 [15～20 分钟演示脚本](docs/demo-script.md)，附有上传样例、讲解顺序、问题与预期依据。最新功能、桌面检查和网络边界见 [交付收尾记录](docs/dev-notes/delivery-wrapup.md)。
+录屏可直接使用 [15～20 分钟演示脚本](docs/deliver/企业知识助理系统演示脚本.md)，附有上传样例、讲解顺序、问题与预期依据。文档删除与历史来源规则见 [整体设计](docs/design.md)，网络排查见 [网络说明](docs/dev-notes/model-network.md)。
 
 ```text
 backend/app/
@@ -333,7 +333,7 @@ backend/app/
   tasks/        Celery 任务、分发和恢复
 backend/migrations/   Alembic 数据库迁移
 frontend/src/         工作台、来源面板、图谱与浏览器事件读取
-docs/                 设计、实施与验收记录
+docs/                 架构、开发说明、测试资料与演示脚本
 test-data/            制度语料、独立评测集与录屏上传样例
 eval/                 交付选题、真实运行报告与逐题核对
 ```
@@ -344,10 +344,17 @@ eval/                 交付选题、真实运行报告与逐题核对
 - 支持上述六类扩展名，旧版 `.doc`、Excel、PPT 等暂未接入。DOCX 采用浏览器重排，布局与 Word 可能略有差异。
 - 图谱面向当前企业制度规则，受原文质量和模型抽取覆盖率影响；两跳证据扩展有明确关系与条件约束。
 - 停止会使本地生成失效并关闭可取消的上游流；意图识别或检索中已发出的非流式请求可能到超时才结束。停止后重新生成会重新调用模型，不从中断 Token 续写。
-- 联网搜索和 LangSmith 追踪已接入；20 题首轮验收、最小评测运行器和 15～20 分钟演示脚本已提供。完整 50 题、MCP、限定文档范围和复制回答暂缓；当前阶段进入录屏与交付，见[增强路线图](docs/roadmap-2026-11-15.md)。
+- 联网搜索和 LangSmith 追踪已接入；20 题首轮验收、最小评测运行器和 15～20 分钟演示脚本已提供。后续只跟踪尚未完成的事项：
+
+  - [ ] 完整 50 题评测及独立人工复核，分别检查检索、事实、引用和拒答；不以基本检查结果宣称整体准确率。
+  - [ ] 完整意图路由评测；当前固定案例只用于小规模回归。
+  - [ ] MCP 只读工具可行性验证；Tavily 直接 API 已满足当前联网需求，MCP 暂缓。
+  - [ ] 前端限定文档问答范围、复制回答；保持单文件文档管理。
+  - [ ] 按演示脚本彩排、检查云服务网络并录制最终视频。
+  - [ ] PDF/图谱大分包体积优化，当前保留按需加载。
 
 测试语料保留在四套独立目录中：`version_chatgpt`、`version_deepseek`、`version_gemini`、`version_qwen`。选一套制度导入即可；**评测问题、标准答案和审查报告不要上传到知识库**，避免评测泄漏。详见[测试资料说明](docs/test-data.md)。
 
-联网与追踪的真实验收见 [Tavily / LangSmith 记录](docs/dev-notes/web-search-langsmith.md)。本轮采用直接搜索 API，不将其称作 MCP 接入。
+联网与追踪的配置及边界见 [Tavily / LangSmith 说明](docs/dev-notes/web-search-langsmith.md)，真实联网案例见 [问答验收](eval/README.md)。当前采用直接搜索 API，不将其称作 MCP 接入。
 
-更多资料：[整体设计](docs/design.md) · [数据库设计](docs/superpowers/specs/2026-11-14-database-design.md) · [实施计划](docs/implementation-plan.md) · [开发与验收索引](docs/dev-notes/README.md)。
+更多资料：[整体设计](docs/design.md) · [数据库设计](docs/superpowers/specs/2026-11-14-database-design.md) · [开发文档索引](docs/dev-notes/README.md) · [问答验收](eval/README.md)。

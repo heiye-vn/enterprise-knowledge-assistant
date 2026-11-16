@@ -4,7 +4,7 @@
 
 | 目录 | 文件数 | 资料类型与用途 |
 | --- | ---: | --- |
-| `test-data/version_chatgpt/` | 15 | `知识库语料/` 中四份制度各有 PDF 和 DOCX；`独立评测集/` 提供 JSONL、CSV、XLSX；另有使用说明和一致性审查报告。作为首批验收资料。 |
+| `test-data/version_chatgpt/` | 17 | `知识库语料/` 中四份制度各有 PDF 和 DOCX；`独立评测集/` 提供 JSONL、CSV、XLSX；另有两张制度 PNG、使用说明和一致性审查报告。作为首批验收资料。 |
 | `test-data/version_deepseek/` | 9 | 四份制度各有 PDF 和 DOCX，另有 Markdown 测试问题集。用于独立制度集的解析与问答测试。 |
 | `test-data/version_gemini/` | 10 | 四份 Markdown、四份 PDF、CSV 和 JSONL 评测资料。JSONL 原文件名为 `rag_eval_dataset_20_jsonl`，未更改扩展名。 |
 | `test-data/version_qwen/` | 9 | 四份制度各有 DOC 和 PDF，另有 CSV 评测资料。DOC 用于后续兼容性测试，保留文件不代表首版已支持该格式。 |
@@ -20,3 +20,5 @@
 5. 原始资料保持不变；校准题目、标注和运行结果放在独立的 `eval/` 目录，并记录所用制度版本与修改依据。当前已提供最小真实问答运行器、20 题选题和逐题报告，见 [交付问答验收](../eval/README.md)；完整 50 题暂缓。
 
 真实上传接入后，前端预置 PDF 副本和 seed JSON 已移除。页面从空库开始，需要通过上传接口导入所需语料；本目录原始文件保留用于后续验收和评测。
+
+`test-data/demo/演示会议预约说明.md` 是独立的录屏上传样例，规则简短，适合验证 Markdown 本地解析、向量入库与引用。它不属于上述四套原始资料。

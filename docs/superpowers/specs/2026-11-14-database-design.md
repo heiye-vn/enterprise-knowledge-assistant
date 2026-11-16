@@ -1,19 +1,19 @@
 # 企业知识助理：8 张核心表设计
 
-日期：2026-11-14。范围：按已确认的精简方案设计数据库，保留当前前端原型的页面与交互。本稿替代此前的细分方案；后续基础工程阶段已落实 8 表 ORM、Alembic 迁移和真实约束验证，详见[实现记录](../../dev-notes/backend-foundation.md)。本文中的完整导入、发布、问答和图谱事务仍是后续业务开发的要求。
+本文说明当前 8 张 PostgreSQL 业务表、引用快照与事务边界。精确字段、CHECK、外键和索引以 [ORM](../../../backend/app/models.py) 和 [Alembic 迁移](../../../backend/migrations/versions/) 为准；整体链路见 [架构说明](../../design.md)。
 
-配套文件：[评审用 PostgreSQL DDL](2026-11-14-database-schema.sql)、[整体设计](../../design.md)。表字段、CHECK、外键和索引的精确定义以 DDL 为准，业务事务规则以本文为准。
+底层保留分类、版本和会话范围字段，以兼容已有数据及固定引用；当前前端按单文件管理，不提供分类、版本管理或指定文档问答入口。
 
 ## 1. 八张表及存储职责
 
 | 表 | 保存什么 | 支撑的前端功能 |
 | --- | --- | --- |
-| documents | 文档标题、分类、当前版本、软删除状态 | 文档目录、搜索、分类筛选 |
+| documents | 文档标题、分类、当前版本、软删除状态 | 文档目录、搜索；分类字段保留兼容 |
 | document_versions | 原件版本、文件位置、已发布索引指针 | 文件查看、版本与历史原文 |
 | document_contents | 每次导入生成的 Markdown、内容块与资源清单 | 正文预览、解析结果、来源定位 |
 | chunks | 不可变切片、章节/页码、定位与向量 | 检索、问答、引用、图谱来源 |
 | processing_jobs | 导入/图谱任务、阶段、检查点、重试和投递时间 | 上传进度、失败重试、图谱构建状态 |
-| chat_sessions | 会话标题、当前问答范围、消息序号 | 新建会话、历史搜索、范围选择 |
+| chat_sessions | 会话标题、当前问答范围、消息序号 | 新建会话、历史搜索；范围字段保留兼容 |
 | chat_messages | 问题、回答、生成状态、每轮资料快照 | 对话恢复、流式回答、停止生成 |
 | message_citations | 最终引用的切片、原文片段与展示快照 | 引用编号、页码、版本与原文溯源 |
 
@@ -77,7 +77,7 @@ erDiagram
 | revision | 元数据修改的乐观并发版本，默认 0 |
 | deleted_at、created_at、updated_at | 软删除与元数据时间 |
 
-复合外键保证 current_version_id 属于这份文档；发布服务另查该版本是否已有 ready 的导入任务。分类重命名在事务中更新匹配的 category 字段，不影响历史引用快照。
+复合外键保证 current_version_id 属于这份文档；发布服务另查该版本是否已有 ready 的导入任务。分类字段保留在模型中，当前没有分类重命名界面。
 
 ### 3.2 document_versions：原件版本
 
@@ -85,7 +85,7 @@ erDiagram
 | --- | --- |
 | id、document_id、version_no | 原件版本身份及上传顺序；同文档 version_no 唯一 |
 | version_label | 原件标注的版本，如 1.1；与上传序号分开 |
-| original_filename、format、size_bytes | 文件名、pdf/docx/md、字节数 |
+| original_filename、format、size_bytes | 文件名、pdf/docx/md/png/jpg、字节数（JPEG 统一为 jpg） |
 | file_sha256 | 数据库保证同文档 hash 唯一；上传服务另按全库文件指纹检查，阻止有效文档间重复导入 |
 | file_ref | JSONB：bucket、object_key、mime_type；不保存临时签名 URL |
 | source_metadata | JSONB：归口部门、原文日期等有 schema 的来源元数据 |
@@ -105,7 +105,7 @@ erDiagram
 | markdown、content_sha256 | 完整规范化正文及 hash |
 | blocks | JSONB 数组：block_id、type、text、heading_path、页码、bbox 或表格结构 |
 | artifacts | JSONB：原始解析归档与资源的 bucket/key/hash 清单 |
-| page_count | 真实 PDF 页数；无可靠分页时为空 |
+| page_count | 真实 PDF 页数，单张图片为 1；DOCX/MD 无可靠分页时为空 |
 | created_at | 产物创建时间 |
 
 正文与列表元数据仍分表。块 ID 在同一 job 内稳定，切片 locators 引用这些块；这里不需要逐块独立检索/更新，所以首版不拆 content_blocks 与关联表。需要读取某页时按 job 与页码定位，不在文档目录加载 blocks。
@@ -114,7 +114,7 @@ erDiagram
 
 | 字段 | 含义与规则 |
 | --- | --- |
-| id | UUIDv5(job_id, ordinal + content_sha256)，同任务重试稳定 |
+| id | UUIDv5(job_id, `chunk-v1:{ordinal}`)，同任务重试稳定 |
 | job_id、version_id、ordinal | 代次、原件与顺序；同 job 的 ordinal 唯一 |
 | content、content_sha256 | 非空切片与 hash；表格切片保留表头和适用条件 |
 | heading_path、page_start、page_end | 章节和真实页码 |
@@ -125,20 +125,20 @@ erDiagram
 
 复合外键将 job/version/profile/dimension 绑定在一起；graph job 没有向量 profile，因此不能作为 chunks 的向量来源。ready 的 chunks 不重写，历史引用直接依赖 chunk_id。
 
-模型名和维度联调前不锁死；当前候选为 1024 维。首版使用精确 cosine 距离验证正确性，数据增长后对确定维度/profile 添加 HNSW 表达式索引，并验证范围过滤后的召回率。维度相同不代表不同模型的向量可混排。
+当前默认向量模型为 qwen3.7-text-embedding-flash、1024 维，实际以配置及导入 profile 为准。首版使用精确 cosine 距离验证正确性，数据增长后对确定维度/profile 添加 HNSW 表达式索引，并验证范围过滤后的召回率。维度相同不代表不同模型的向量可混排。
 
 ### 3.5 processing_jobs：统一任务表
 
 | 字段 | 含义与规则 |
 | --- | --- |
 | id、version_id、generation_no | 任务身份、来源原件与版本内递增代次 |
-| job_type | import / graph，使用不同 Celery 队列和处理器 |
+| job_type | import / graph，使用不同处理器，共用 documents 队列 |
 | source_job_id | graph 必须指向同版本的 ready import job；import 必须为空 |
 | status、stage | 通用任务状态和具体处理阶段，见第 5 节 |
 | config、config_hash | 不含密钥的解析/模型/切片或图谱配置快照及 hash |
 | embedding_profile_hash、embedding_dimension | import 必填，graph 为空；graph 使用 source_job 的切片 |
 | checkpoint | JSONB：远端任务 ID、提交状态、产物位置、阶段计数；graph 另存已校验的抽取结果/manifest/hash |
-| attempt_no、max_attempts | 处理认领次数和上限，默认 0 / 3 |
+| attempt_no、max_attempts | 故障尝试次数和上限，默认 0 / 3；正常分批续跑不增加尝试次数 |
 | lease_owner、lease_token、lease_expires_at | Worker 租约及单调递增令牌，防止过期 Worker 覆盖 |
 | next_dispatch_at、last_dispatched_at、dispatch_attempts | 下次投递时间、最近成功投递时间、投递次数 |
 | error | JSONB：code、message、retryable、stage；不写入密钥和完整异常环境 |
@@ -169,14 +169,14 @@ all 表示每次提问时解析当前可用文档，不固定为创建会话那�
 | client_request_id | assistant 保存本次请求的客户端 UUID；同会话唯一，重试返回既有消息 |
 | content | Markdown 文本；助手可保存流式片段，最终来源另从引用表组装 |
 | status、answer_kind | 生成状态；完成回答分 answered / partially_answered / refused |
-| request_snapshot | assistant 的本轮范围、版本/任务清单、模型参数、上下文截止序号和请求指纹 |
+| request_snapshot | assistant 的本轮资料清单、profile、尝试编号、执行模式、阶段与检索详情 |
 | error、usage | JSONB：错误摘要与供应商实际返回的用量 |
 | lease_expires_at、stop_requested_at | 请求存活检查和停止请求 |
 | created_at、updated_at | 消息时间 |
 
 user 必须为 completed，reply_to/client_request/snapshot 为空；assistant 必须具备这三项。外键保证答复不跨会话，服务再检查目标角色是 user。每个会话最多一个 queued/retrieving/generating 助手消息，防止追问并发混入历史。
 
-助手消息 ID 就是生成请求 ID，不再拆 chat_turns。客户端保存 client_request_id；同键不同问题/范围由请求指纹返回 409，而不是生成第二轮。
+助手消息 ID 就是生成请求 ID，不再拆 chat_turns。客户端保存 client_request_id；同键不同问题或联网选择返回 409；显式重试增加 retry_attempt，并复用原消息身份。
 
 ### 3.8 message_citations：最终引用
 
@@ -192,11 +192,11 @@ user 必须为 completed，reply_to/client_request/snapshot 为空；assistant �
 
 ## 4. JSONB 的结构与校验责任
 
-JSONB 是合并存储，不是取消数据约束。服务使用 Pydantic 定义各字段的结构，在写入和恢复时校验；数据库检查对象/数组基本形状。request_snapshot 显式记录 schema_version，其余字段的 schema 随迁移和应用版本管理，不能随意增加未定义结构。
+JSONB 是合并存储，不是取消数据约束。服务使用 Pydantic 定义各字段的结构，在写入和恢复时校验；数据库检查对象/数组基本形状。检索详情使用 details.version 标识结构版本；其余快照字段按实际服务序列化结构维护，不把设计示例当作接口契约。
 
 ### 4.1 解析块与切片定位
 
-blocks 中每项包含 block_id、type、text、heading_path、page_start/page_end；可选 structured_content 保存表头/行，locators 保存按页的 bbox。bbox 必须同时记录单位、页尺寸和坐标基准，不将不同解析器的坐标直接混用。
+blocks 中每项包含 block_id、type、text、heading_path、page_start/page_end；可选 structured_content 保存表头/行，locators 保存按页的 bbox。bbox 保留解析器原始信息，不假定单位或将不同解析器坐标直接混用。
 
 chunks.locators 引用同 job 的 block_id，可带块内 Unicode 码点半开区间和按页 bbox。发布服务校验引用块确实存在，范围与页码合理；一块可贡献给多个切片。跨页表格保留上下文和适用条件。
 
@@ -211,31 +211,16 @@ chunks.locators 引用同 job 的 block_id，可带块内 Unicode 码点半开�
 
 mode=all 时 document_ids 必须为空；custom 时必须非空且去重。数据库只检查 JSON 形状与 mode 值；UUID 格式、文档存在性和可用性由服务验证。
 
-assistant.request_snapshot 的核心结构如下，示例 ID/hash 仅用于说明格式，实际由服务从数据库与部署配置生成：
+assistant.request_snapshot 随实际阶段更新：
 
-```json
-{
-  "schema_version": 1,
-  "scope_mode": "custom",
-  "scope_revision": 2,
-  "context_up_to_seq": 4,
-  "request_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "documents": [{
-    "document_id": "11111111-1111-4111-8111-111111111111",
-    "version_id": "22222222-2222-4222-8222-222222222222",
-    "job_id": "33333333-3333-4333-8333-333333333333",
-    "graph_job_id": null
-  }],
-  "embedding_profile_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "embedding_dimension": 1024,
-  "model_config": {},
-  "retrieval_config_version": "rag-v1"
-}
-```
+- `documents` 固定检索开始时可用的 document_id、version_id、job_id，`profile_hash` 标识向量空间；没有知识库检索时资料清单为空。
+- `attempt_no`、`web_search_requested`、`transport` 区分尝试编号、联网选择与 SSE 请求；旧尝试不能覆盖新结果。
+- `answer_mode`、`stream_phase`、`stop_reason` 描述实际执行模式、阶段与停止原因。
+- `details` 保存意图、召回/重排、图谱路径、网页来源、Trace ID 与耗时；`warnings` 保存降级说明。已有历史消息缺失这些信息时不补造。
 
-实际 model_config 必须保存使用的聊天/向量供应商、模型、版本、提示模板和必要参数，示例中的空对象不能用于真实生成；不保存密钥。资料清单和模型配置在问答开始时冻结。后续检索使用该清单，不能每一步重新解析“当前版本”。
+实际字段由 [聊天服务](../../../backend/app/chat/service.py)、[流式状态](../../../backend/app/chat/stream_state.py) 和 [检索快照](../../../backend/app/retrieval/search.py) 生成，不接收客户端自报的资料快照，也不保存密钥。
 
-首版固定一个部署级向量模型，不提供在线热切换。所有入选 job 必须属于相同向量空间。更换模型时在维护窗口重建并切换发布指针后再恢复服务，不能仅修改环境变量就把新查询向量与旧向量混排。
+当前部署固定一个向量空间。更换模型或维度后需要重建并发布兼容索引，再恢复查询；维度相同也不能把不同模型的向量混排。
 
 ### 4.3 引用快照
 
@@ -265,12 +250,12 @@ stateDiagram-v2
 | import | parsing → chunking → embedding → publishing | 正文、定位和向量齐备，结果已完成发布判断 |
 | graph | extracting → validating → projecting | 校验后的抽取结果已写入 Neo4j 并核对完成 |
 
-queued 的 stage=queued；ready 的 stage=done。failed/canceled 保留当时 stage 便于诊断。API 将 import 的 running+stage 映射为现有“解析文档/生成切片/建立索引”等状态；两个任务类型不需要两个任务表。
+新任务初始为 queued/stage=queued；正常延后轮询可以保持 queued/parsing 等当前阶段；ready 的 stage=done。failed/canceled 保留当时 stage 便于诊断。API 将 import 的 running+stage 映射为现有“解析文档/生成切片/建立索引”等状态；两个任务类型不需要两个任务表。
 
 ### 5.2 上传去重与版本身份
 
 - 新建上传：客户端为这次新文档生成并保留一个 document_id，POST /api/documents 提交文件及标题/分类。请求丢失后重试使用同一 ID。
-- 已有相同 ID 与相同原件 hash 时，返回既有版本与相同配置的已有任务；同一 ID 的新建请求携带不同文件则返回 409，不暗中创建新版本或覆盖文件。元数据变化使用独立 PATCH。
+- 已有相同 ID 与相同原件 hash 时，返回既有版本与相同配置的已有任务；同一 ID 的新建请求携带不同文件则返回 409，不暗中创建新版本或覆盖文件。不把不同文件暗中视为元数据更新。
 - 新增前检查：POST /api/documents/check-duplicate 接收 file_sha256，查询未软删除文档的全部历史版本，返回 duplicate 和既有文档/版本身份。文件改名不改变指纹；跨格式、重新导出或仅正文相同的不同字节不做语义去重。重复文件跳过导入，展示已有文档信息；首版不提供绕过去重的“仍然新建”。同批次同指纹只保留第一份。
 - 更新文件：显式 POST /api/documents/{document_id}/versions。同文档同 hash 复用版本；不同 hash 也先做全库检查，若命中其他有效文档则返回已有文档，不创建版本，否则分配新 version_no。已软删除文档不占用有效库的指纹，可以重新导入；历史数据仍保留。
 - 预检查只是用户反馈。正式上传时服务必须用实际接收字节重新计算 SHA-256，在 READ COMMITTED 事务中先调用 lock_and_check_file，以指纹前 64 位取得 pg_advisory_xact_lock，锁保持至文档/版本/任务登记提交或回滚。相同文件的所有写入入口遵循此边界；命中即复用返回，不写新文档、版本或任务，也不发起解析/向量调用。新建接口同一 ID 的不同文件冲突检查优先，继续返回 409。
@@ -298,17 +283,17 @@ queued 的 stage=queued；ready 的 stage=done。failed/canceled 保留当时 st
 - 跨文档/版本/任务的事务统一按 document → version → job 顺序锁行，校验当前租约、正文、块定位、非空向量、profile 和计数。成功后标记 ready/stage=done，再按 generation_no 更新 active_import_job_id；按 version_no 更新 current_version_id，较旧的迟到任务不能倒退指针。
 - active_import_job_id 的 FK 只验证版本归属，服务还必须验证目标 job_type=import 且 ready。文档软删除时不发布新结果。
 - 原件更新或同版本重建过程中，旧的发布指针继续可用；失败不将已有可用文档降级。
-- 同一事务创建 job_type=graph 的 queued 行，source_job_id 指向刚完成的 import。重复完成的 job 直接返回，不重复创建图谱任务。
+- 索引完成后不自动抽取图谱。用户通过 POST /api/graph/build 按需创建或复用 graph 任务，source_job_id 绑定已发布 import；重复请求不重复创建相同任务。
 
 ### 5.5 图谱结果与 Neo4j
 
 graph 的 source_job_id 必须是同版本的 ready import，服务验证这一类型规则。抽取只使用该 job 的切片；checkpoint 保存校验后的 result/manifest/hash，投影失败时重放相同结果，不重新调用模型抽取。
 
-Neo4j 的文档/版本/Chunk 身份沿用 PG ID，Matter/Role/Material 按类型和明确别名规则归一化，Rule 按源 job/条款/条件限定。关系保留 graph_job_id、source_job_id、source_chunk_ids、原始引文和适用条件。金额、时长、上下界和审批/备案职责不可丢失。
+Neo4j 使用 Document、Matter、Rule、Role、Material 等节点和有来源的关系。规则与边采用包含任务及租约令牌的不可变 projection_id，文档/岗位等实体可以共享；图谱来源通过 PostgreSQL 的固定 job/chunk 和 locator 回查。
 
-按 graph_job_id 幂等投影；每批写入通过 GraphBuild 节点写锁与递增 lease_token 阻止过期 Worker 写入。确认结果 hash 与数量后标记 graph job ready。当前可用图谱取 source_job_id=当前 active import 且 ready 的最新 generation，不再另设图谱发布指针。
+每批抽取校验后保存检查点；投影失败复用结果，不重新调用模型。Neo4j 参数化事务按 namespace/id 保持幂等，PostgreSQL 仅发布仍持有效租约且来源有效的结果。读取排除旧导入和已删除来源，不设置额外业务表。
 
-图谱页面、搜索、展开/收起与 ECharts 保持原交互。服务端返回局部图，每次最多 80 个节点；收起只改变前端显示，不删除事实。范围清单的 fingerprint 变化时明确要求刷新，不能拼接不同版本的图。图谱失败不影响普通检索问答。
+画布最多展示 80 个节点，图谱接口最多返回 1000 节点/5000 边，达到限制时提示；收起只改变显示，不删除事实。图谱失败不影响基础 RAG。详见 [知识图谱](../../dev-notes/knowledge-graph.md)。
 
 ## 6. 一轮问答的事务规则
 
@@ -329,15 +314,15 @@ stateDiagram-v2
     failed --> [*]
 ```
 
-1. 先按 session_id/client_request_id 查询既有助手消息，比较请求指纹。相同请求返回既有状态，不再创建用户消息或重新收费生成。
-2. 新请求锁住 session 后再次检查幂等键，避免两个并发重发同时通过初查；检查 scope_revision 与单活动回答，在一致性快照中解析可用资料、模型配置及每个版本的 active import/ready graph job。
-3. 在同一 PG 事务分配两个 sequence_no，创建 user 和 assistant 占位消息，后者保存 request_snapshot。范围为空则明确报错，不扩大范围或制造拒答。
-4. 检索、图谱扩展和精排使用 snapshot 中的 job/profile；不持有长事务调用模型，不使用历史助手回答替代制度来源。
-5. 完成事务锁助手消息，确认未先进入 stopped/failed，写 content、message_citations、answer_kind 和 completed。拒答为 completed+refused，服务故障为 failed。
-6. 停止请求与完成写入按同一助手消息串行化，先到的终态生效；未校验的流式片段不能附上完整引用。
-7. 请求执行中续租，重启后将过期活动助手消息标为 failed。保留 partial 文本，不自动重发模型请求；用户重试使用新的 client_request_id。
+1. 按 session_id/client_request_id 查询既有助手消息，校验问题和联网选择；同一请求重放返回已保存状态。显式重试用 retry_attempt 增加尝试编号，总共最多 3 次，复用原 user/assistant 消息。
+2. 锁住 session 后检查单活动回答并分配消息序号。首次发消息可同时创建会话，反复新建不会保存空会话。
+3. 路由后若为知识问题，检索用一致读事务固定已发布的文档/version/job/profile 清单。空库或无依据返回明确拒答；通用、澄清和联网分支不冒用知识库引用。
+4. 检索和模型请求在数据库长事务之外执行。草稿分批落库后才发送 SSE 增量，写入时检查消息终态、当前尝试编号及租约。
+5. 完成时锁助手消息，在同一事务校验正文、实际引用、原文与资料范围，再保存正文、引用、answer_kind 和 completed；拒答为 completed+refused，服务故障为 failed。
+6. 停止与完成按同一消息串行化；未完成文本没有有效引用，过期旧尝试不能发布。停止还会尝试关闭可取消的上游模型流。
+7. 进程中断后将过期活动消息恢复为可重试失败，保留草稿，不自动重发模型；用户主动重新生成沿用同一请求身份。
 
-会话 scope 修改只影响之后的提问。标题或分类变化不改变引用快照；文档新版本发布后，历史引用仍打开原 version_id 的文件。软删除后停止新检索，历史来源可标为 removed；首版不做自动物理清理。
+底层 scope 结构由服务校验，当前聊天默认检索全部有效知识库。文档新版本发布或软删除后，历史引用仍打开固定 version/job 来源；删除规则与对象保留期见 [整体设计](../../design.md#5-文档导入与任务恢复)。
 
 ## 7. 约束、索引与前端映射
 
@@ -356,44 +341,33 @@ stateDiagram-v2
 
 ### 索引
 
-DDL 包含文档按时间/分类的游标分页、版本号和 hash 去重、任务认领/投递/租约恢复、最新 ready graph、会话历史、会话内单活动回答、引用反查等索引。唯一约束已覆盖的前缀不重复建索引。
+迁移包含文档按时间/分类的列表索引、版本号和 hash 去重、任务认领/投递/租约恢复、最新 ready graph、会话历史、会话内单活动回答、引用反查等索引。唯一约束已覆盖的前缀不重复建索引。
 
 元数据搜索先用带参数的 ILIKE，数据增长后增加 pg_trgm；正文和向量只按当前可用或本轮固定的 job 查询。BM25 缓存按 job 清单和切片配置签名失效。引入 ANN 前验证范围过滤后的召回，不能先全库取少量结果再过滤。
 
-### 接口与原型功能
+### 当前接口与数据来源
 
-| 原型功能 | 数据来源与接口约定 |
+| 功能 | 数据来源与接口 |
 | --- | --- |
-| 文档列表、分类、搜索 | documents 与当前 version/job 摘要；category 为字符串，分类计数 GROUP BY category；列表不取正文/向量 |
-| 当前可问答 + 更新处理中 | current_version/active_import 与 latest_processing 分开返回，不能用一个状态互相覆盖 |
-| 上传与失败重试 | POST /api/documents/check-duplicate；POST /api/documents；POST /api/documents/{id}/versions；GET /api/processing-jobs/{id}；POST /api/processing-jobs/{id}/retry |
-| 正文、解析片段与 PDF | 按 active import 读 document_contents/chunks；GET /api/document-versions/{id}/file 始终打开该版本原件 |
-| 新建/历史会话与范围选择 | POST/GET /api/sessions；PATCH /api/sessions/{id}/scope（带 expected_scope_revision） |
-| 发送与停止生成 | POST /api/chat（session_id、client_request_id、scope_revision、text）；POST /api/chat-messages/{id}/stop，id 为助手消息 ID |
-| 回答引用 | message_citations → chunks → document_versions，恢复标题/页码快照；GET /api/chunks/{id} 不返回向量 |
-| 图谱搜索、展开/收起 | processing_jobs 的 ready graph + Neo4j；GET /api/graph 返回五类节点、关系、sources、fingerprint 与 has_more |
+| 文档列表、搜索 | GET /api/documents，offset/limit 元数据分页，不加载正文或向量 |
+| 上传与失败重试 | POST /api/documents/check-duplicate；POST /api/documents；POST /api/processing-jobs/{id}/retry |
+| 正文与原件 | GET /api/document-versions/{id}/parsed?job_id=...；GET /api/document-versions/{id}/file |
+| 文档删除 | DELETE /api/documents/{id}，排除新检索并保留历史固定来源 |
+| 新建、历史与删除会话 | POST/GET /api/sessions；GET/DELETE /api/sessions/{id} |
+| 发送、停止与重试 | POST /api/chat/stream；POST /api/chat/stop；同步 POST /api/chat 保留兼容，重试增加 retry_attempt |
+| 回答引用 | message_citations → chunks → document_versions；GET /api/chunks/{id} 不返回向量 |
+| 图谱生成与读取 | POST /api/graph/build；GET /api/graph，可按 document_id 筛选 |
 
-接口适配层可以继续返回当前原型使用的 status、pages、category、sources 等展示结构，前端无需理解表数量或 JSONB 存储方式。真实流式协议在 AI SDK 实际版本下验证，不能把原型定时器当成真实任务状态。
+底层仍保留新版本、重新解析、重建索引和 scope 仓储能力，当前没有范围修改 API 或相应前端入口。浏览器通过原生 fetch 读取 POST SSE，协议详见 [流式与停止](../../dev-notes/streaming-readme.md)。
 
-## 8. 迁移与分阶段验证
+## 8. 迁移与验证入口
 
-设计附件保留为 DDL 参考；实际建表由 backend/migrations/versions/0001_core.py 及冻结 SQL 快照管理，已在本项目的独立数据库执行。创建顺序为 documents → document_versions → processing_jobs → 补发布指针 → 正文/切片 → 会话/消息/引用。后续改表添加新迁移，不让已执行迁移依赖可变的设计文档。
+| 迁移 | 作用 |
+| --- | --- |
+| [0001_core.py](../../../backend/migrations/versions/0001_core.py) / [冻结 SQL](../../../backend/migrations/versions/0001_core.sql) | 创建 8 张业务表、约束和初始索引 |
+| [0002_file_fingerprint.py](../../../backend/migrations/versions/0002_file_fingerprint.py) | 增加全库指纹查询索引 |
+| [0003_image_documents.py](../../../backend/migrations/versions/0003_image_documents.py) | 格式约束加入 png/jpg，存在图片时拒绝降级缩窄约束 |
 
-实际 PostgreSQL/Neo4j 集成验证至少覆盖：
+后续结构变更新增迁移，不修改已执行的冻结 SQL。数据库另有 Alembic 自带的 alembic_version，不计入 8 张业务表。
 
-- 同一新建 document_id 重试、同文档同 hash 重传、同名不同文件、显式新版本与两个并发上传。
-- 同 job 重复投递、发送前崩溃、Broker 收到但 Worker 未认领、租约过期后旧 Worker 晚到、MinerU 提交结果不确定。
-- 新版本/重建失败仍可使用旧结果，较旧版本/代次迟到不能倒退发布指针。
-- source_job 类型错误、chunk 代次/profile/维度错配、内容块缺失、PDF 页码无效、DOCX/MD 无页码。
-- scope JSON 中无效/已删除文档、custom 空范围、修改范围不影响旧回答、服务不能接受伪造 snapshot。
-- 同会话并发问答、请求重发、停止与完成竞争、进程重启后的遗留生成请求。
-- 引用非助手消息、范围外切片、错误页码/引文/编号；更新标题、版本或软删除后仍能打开历史原件。
-- 图谱抽取成功但投影失败、相同结果重放、过期投影 Worker、80 节点上限和图谱 fingerprint 改变。
-
-2026-11-14 离线校验结果：
-
-- pglast 解析 DDL 通过，确认 8 张表、101 个字段、11 个外键、55 个 CHECK 和 11 个显式索引；外键列存在、类型与唯一目标匹配，CHECK/索引引用的列均存在。字段说明与 SQL 列清单一致。
-- Mermaid 解析通过：本稿的 1 张 ER 图、2 张状态图，以及整体设计中的导入流程图；ER 实体集合与 8 张表一致。
-- 2 个 JSON 示例、实施计划中的 5 个 Python 示例语法和四份关联文档的 13 个本地 Markdown 链接检查通过；README、整体设计和实施计划已同步精简模型与接口路径。
-
-以上为设计阶段的静态检查记录。基础工程阶段随后已执行真实迁移、18 项默认测试和 35 项真实集成测试，包括引用保存及跨事务停止/范围冲突；具体覆盖范围见[开发记录](../../dev-notes/backend-foundation.md)。上述清单中涉及完整 Worker、MinerU、发布调度、模型生成和图谱投影的用例仍待后续业务阶段执行，不能将基础测试通过等同于完整链路通过。
+回归入口包括 `backend/tests/test_database.py`、`test_migrations.py`、`test_concurrent_storage.py`、`test_chat_storage.py`、`test_document_deletion.py` 和图谱相关测试；命令见 [README](../../../README.md#验证与开发)。真实问答质量与语义核对见 [eval](../../../eval/README.md)，不以数据库约束或测试条数代替回答质量。
