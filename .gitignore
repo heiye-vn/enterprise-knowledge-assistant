@@ -15,3 +15,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .playwright-mcp
+
+# 交付相关文档
+docs/deliver/
+
