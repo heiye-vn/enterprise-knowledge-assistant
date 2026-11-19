@@ -6,7 +6,16 @@ from urllib.parse import quote
 from uuid import UUID
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
@@ -36,6 +45,7 @@ def get_db(request: Request):
 
 
 @router.post("/check-duplicate", response_model=DuplicateCheck)
+# 文件指纹重复检查
 def check_duplicate(body: FingerprintRequest, db: Annotated[Session, Depends(get_db)]):
     try:
         return check_fingerprint(db, body.file_sha256)
@@ -49,14 +59,18 @@ def check_duplicate(body: FingerprintRequest, db: Annotated[Session, Depends(get
         ) from None
 
 
-def _accept(request, db, document_id, file, title=None, category="未分类", *, new_version=False):
+def _accept(
+    request, db, document_id, file, title=None, category="未分类", *, new_version=False
+):
     settings = request.app.state.settings
     content = file.file.read(settings.upload_max_bytes + 1)
     service = ImportService(db, settings, ObjectStorage(settings))
     try:
         with db.begin():
             if new_version:
-                accepted = service.add_version(document_id, file.filename or "", content)
+                accepted = service.add_version(
+                    document_id, file.filename or "", content
+                )
             else:
                 accepted = service.create(
                     document_id, file.filename or "", content, title, category
@@ -103,7 +117,9 @@ def add_version(
 
 
 @router.get("")
-def list_documents(db: Annotated[Session, Depends(get_db)], offset: int = 0, limit: int = 100):
+def list_documents(
+    db: Annotated[Session, Depends(get_db)], offset: int = 0, limit: int = 100
+):
     if offset < 0 or limit < 1 or limit > 100:
         raise HTTPException(422, "分页参数无效")
     total = db.scalar(
@@ -116,7 +132,10 @@ def list_documents(db: Annotated[Session, Depends(get_db)], offset: int = 0, lim
         .offset(offset)
         .limit(limit)
     )
-    return {"items": [document_summary(db, identity) for identity in ids], "total": total}
+    return {
+        "items": [document_summary(db, identity) for identity in ids],
+        "total": total,
+    }
 
 
 @router.get("/{document_id}")
@@ -181,7 +200,9 @@ def list_versions(document_id: UUID, db: Annotated[Session, Depends(get_db)]):
 
 
 @files_router.api_route("/{version_id}/file", methods=["GET", "HEAD"])
-def original_file(version_id: UUID, request: Request, db: Annotated[Session, Depends(get_db)]):
+def original_file(
+    version_id: UUID, request: Request, db: Annotated[Session, Depends(get_db)]
+):
     version = db.get(DocumentVersion, version_id)
     if version is None:
         raise HTTPException(404, "原件不存在")
@@ -193,7 +214,9 @@ def original_file(version_id: UUID, request: Request, db: Annotated[Session, Dep
         metadata = storage.head(key)
     except ClientError as error:
         code = error.response.get("Error", {}).get("Code")
-        raise HTTPException(404 if code in {"404", "NoSuchKey"} else 503, "原件暂不可用") from None
+        raise HTTPException(
+            404 if code in {"404", "NoSuchKey"} else 503, "原件暂不可用"
+        ) from None
     except BotoCoreError:
         raise HTTPException(503, "原件暂不可用") from None
     size = metadata["ContentLength"]
@@ -209,15 +232,22 @@ def original_file(version_id: UUID, request: Request, db: Annotated[Session, Dep
     if request.method != "HEAD" and (value := request.headers.get("range")):
         match = re.fullmatch(r"bytes=(\d*)-(\d*)", value)
         if not match or not any(match.groups()):
-            raise HTTPException(416, "不支持此范围", headers={"Content-Range": f"bytes */{size}"})
+            raise HTTPException(
+                416, "不支持此范围", headers={"Content-Range": f"bytes */{size}"}
+            )
         left, right = match.groups()
         start = int(left) if left else max(0, size - int(right))
         end = min(int(right), size - 1) if left and right else size - 1
         if start >= size or start > end:
-            raise HTTPException(416, "读取范围无效", headers={"Content-Range": f"bytes */{size}"})
+            raise HTTPException(
+                416, "读取范围无效", headers={"Content-Range": f"bytes */{size}"}
+            )
         status, byte_range = 206, f"bytes={start}-{end}"
         headers.update(
-            {"Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(end - start + 1)}
+            {
+                "Content-Range": f"bytes {start}-{end}/{size}",
+                "Content-Length": str(end - start + 1),
+            }
         )
     if request.method == "HEAD":
         return Response(status_code=200, headers=headers)

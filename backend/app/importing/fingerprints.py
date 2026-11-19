@@ -30,10 +30,12 @@ class DuplicateCheck(BaseModel):
     existing: ExistingDocument | None
 
 
+# 后端自己重新计算文件指纹
 def file_fingerprint(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+# SQL 查重逻辑
 def check_fingerprint(db: Session, file_sha256: str) -> DuplicateCheck:
     if not re.fullmatch(r"[a-f0-9]{64}", file_sha256):
         raise ValueError("Invalid SHA-256 fingerprint")
@@ -47,7 +49,10 @@ def check_fingerprint(db: Session, file_sha256: str) -> DuplicateCheck:
                 DocumentVersion.version_no,
             )
             .join(DocumentVersion, DocumentVersion.document_id == Document.id)
-            .where(DocumentVersion.file_sha256 == file_sha256, Document.deleted_at.is_(None))
+            .where(
+                DocumentVersion.file_sha256 == file_sha256,  # 哈希对比
+                Document.deleted_at.is_(None),  # 查询未删除的文档
+            )
             .order_by(Document.created_at, Document.id, DocumentVersion.version_no)
             .limit(1)
         )
@@ -60,6 +65,7 @@ def check_fingerprint(db: Session, file_sha256: str) -> DuplicateCheck:
     )
 
 
+# 取 SHA-256 前 8 字节执行
 def lock_and_check_file(db: Session, content: bytes) -> DuplicateCheck:
     """Recompute server-side and serialize same-file writers until commit/rollback.
 
@@ -69,5 +75,6 @@ def lock_and_check_file(db: Session, content: bytes) -> DuplicateCheck:
     """
     file_sha256 = file_fingerprint(content)
     lock_key = int.from_bytes(bytes.fromhex(file_sha256)[:8], "big", signed=True)
+    # pg_advisory_xact_lock：数据库排他锁，防止高并发冲突
     db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
     return check_fingerprint(db, file_sha256)
