@@ -49,9 +49,15 @@ class Document(Base):
         String(80), nullable=False, server_default=text("'未分类'")
     )
     current_version_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
-    next_version_no: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
-    revision: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_version_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
+    revision: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -66,7 +72,8 @@ class DocumentVersion(Base):
         ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="RESTRICT"),
         CheckConstraint("version_no > 0"),
         CheckConstraint(
-            "format IN ('pdf', 'docx', 'md', 'png', 'jpg')", name="document_versions_format_check"
+            "format IN ('pdf', 'docx', 'md', 'png', 'jpg')",
+            name="document_versions_format_check",
         ),
         CheckConstraint("size_bytes > 0"),
         CheckConstraint("file_sha256 ~ '^[0-9a-f]{64}$'"),
@@ -75,7 +82,9 @@ class DocumentVersion(Base):
         CheckConstraint("next_generation_no > 0"),
         UniqueConstraint("document_id", "version_no"),
         UniqueConstraint("document_id", "file_sha256"),
-        Index("ix_versions_file_sha256", "file_sha256"),
+        Index(
+            "ix_versions_file_sha256", "file_sha256"
+        ),  # 为哈希字段单独建立索引，提升数据库查重时的响应（补充：几乎所有关系型数据库中，创建的普通索引默认是 B-Tree(平衡多叉树)索引的，除非显示指定索引类型）
         UniqueConstraint("id", "document_id"),
         ForeignKeyConstraint(
             ["active_import_job_id", "id"],
@@ -97,7 +106,9 @@ class DocumentVersion(Base):
         JSONB(none_as_null=True).evaluates_none(), nullable=False
     )
     source_metadata: Mapped[dict] = mapped_column(
-        JSONB(none_as_null=True).evaluates_none(), nullable=False, server_default=text("'{}'")
+        JSONB(none_as_null=True).evaluates_none(),
+        nullable=False,
+        server_default=text("'{}'"),
     )
     active_import_job_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     next_generation_no: Mapped[int] = mapped_column(
@@ -111,10 +122,14 @@ class DocumentVersion(Base):
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
     __table_args__ = (
-        ForeignKeyConstraint(["version_id"], ["document_versions.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(
+            ["version_id"], ["document_versions.id"], ondelete="RESTRICT"
+        ),
         CheckConstraint("job_type IN ('import', 'graph')"),
         CheckConstraint("generation_no > 0"),
-        CheckConstraint("status IN ('queued', 'running', 'ready', 'failed', 'canceled')"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'ready', 'failed', 'canceled')"
+        ),
         CheckConstraint(
             "stage IN ('queued', 'parsing', 'chunking', 'embedding', 'publishing', "
             "'extracting', 'validating', 'projecting', 'done')"
@@ -129,7 +144,9 @@ class ProcessingJob(Base):
         CheckConstraint("jsonb_typeof(error) = 'object'"),
         UniqueConstraint("version_id", "generation_no"),
         UniqueConstraint("id", "version_id"),
-        UniqueConstraint("id", "version_id", "embedding_profile_hash", "embedding_dimension"),
+        UniqueConstraint(
+            "id", "version_id", "embedding_profile_hash", "embedding_dimension"
+        ),
         ForeignKeyConstraint(
             ["source_job_id", "version_id"],
             ["processing_jobs.id", "processing_jobs.version_id"],
@@ -149,28 +166,42 @@ class ProcessingJob(Base):
             "'chunking', 'embedding', 'publishing')) OR (job_type = 'graph' AND stage IN "
             "('extracting', 'validating', 'projecting'))"
         ),
-        CheckConstraint("status <> 'ready' OR (stage = 'done' AND finished_at IS NOT NULL)"),
+        CheckConstraint(
+            "status <> 'ready' OR (stage = 'done' AND finished_at IS NOT NULL)"
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, nullable=False)
     version_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     job_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_job_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     generation_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'queued'"))
-    stage: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'queued'"))
-    config: Mapped[dict] = mapped_column(JSONB(none_as_null=True).evaluates_none(), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'queued'")
+    )
+    stage: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'queued'")
+    )
+    config: Mapped[dict] = mapped_column(
+        JSONB(none_as_null=True).evaluates_none(), nullable=False
+    )
     config_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     embedding_profile_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
     embedding_dimension: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     checkpoint: Mapped[dict] = mapped_column(
-        JSONB(none_as_null=True).evaluates_none(), nullable=False, server_default=text("'{}'")
+        JSONB(none_as_null=True).evaluates_none(),
+        nullable=False,
+        server_default=text("'{}'"),
     )
-    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    attempt_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     max_attempts: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("3")
     )
     lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    lease_token: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    lease_token: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -186,8 +217,12 @@ class ProcessingJob(Base):
     error: Mapped[dict | None] = mapped_column(
         JSONB(none_as_null=True).evaluates_none(), nullable=True
     )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -219,7 +254,9 @@ class DocumentContent(Base):
         deferred=True,
     )
     artifacts: Mapped[dict] = mapped_column(
-        JSONB(none_as_null=True).evaluates_none(), nullable=False, server_default=text("'{}'")
+        JSONB(none_as_null=True).evaluates_none(),
+        nullable=False,
+        server_default=text("'{}'"),
     )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
@@ -251,7 +288,9 @@ class Chunk(Base):
             "(page_start IS NULL AND page_end IS NULL) OR (page_start IS NOT NULL AND "
             "page_end IS NOT NULL AND page_start >= 1 AND page_end >= page_start)"
         ),
-        CheckConstraint("embedding IS NULL OR vector_dims(embedding) = embedding_dimension"),
+        CheckConstraint(
+            "embedding IS NULL OR vector_dims(embedding) = embedding_dimension"
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, nullable=False)
     job_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
@@ -265,11 +304,15 @@ class Chunk(Base):
     page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     locators: Mapped[list[dict]] = mapped_column(
-        JSONB(none_as_null=True).evaluates_none(), nullable=False, server_default=text("'[]'")
+        JSONB(none_as_null=True).evaluates_none(),
+        nullable=False,
+        server_default=text("'[]'"),
     )
     embedding_profile_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     embedding_dimension: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True, deferred=True)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(), nullable=True, deferred=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -288,7 +331,9 @@ class ChatSession(Base):
         CheckConstraint("next_message_seq > 0"),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, nullable=False)
-    title: Mapped[str] = mapped_column(String(300), nullable=False, server_default=text("'新会话'"))
+    title: Mapped[str] = mapped_column(
+        String(300), nullable=False, server_default=text("'新会话'")
+    )
     scope: Mapped[dict] = mapped_column(
         JSONB(none_as_null=True).evaluates_none(),
         nullable=False,
@@ -300,8 +345,12 @@ class ChatSession(Base):
     next_message_seq: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default=text("1")
     )
-    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -339,7 +388,9 @@ class ChatMessage(Base):
             "reply_to_message_id <> id AND client_request_id IS NOT NULL AND "
             "request_snapshot IS NOT NULL)"
         ),
-        CheckConstraint("role <> 'assistant' OR status <> 'completed' OR answer_kind IS NOT NULL"),
+        CheckConstraint(
+            "role <> 'assistant' OR status <> 'completed' OR answer_kind IS NOT NULL"
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, nullable=False)
     session_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
@@ -347,8 +398,12 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_message_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     client_request_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'completed'"))
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("''")
+    )
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'completed'")
+    )
     answer_kind: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_snapshot: Mapped[dict | None] = mapped_column(
         JSONB(none_as_null=True).evaluates_none(), nullable=True
@@ -432,7 +487,11 @@ Index(
     postgresql_where=text("status = 'queued'"),
 )
 
-Index("ix_jobs_lease", ProcessingJob.lease_expires_at, postgresql_where=text("status = 'running'"))
+Index(
+    "ix_jobs_lease",
+    ProcessingJob.lease_expires_at,
+    postgresql_where=text("status = 'running'"),
+)
 
 Index(
     "ix_jobs_latest_ready_graph",

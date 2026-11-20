@@ -1,4 +1,7 @@
-"""Index file fingerprints for checks across the whole library."""
+"""
+Index file fingerprints for checks across the whole library.
+为全库文件指纹检查建立索引
+"""
 
 from alembic import op
 
