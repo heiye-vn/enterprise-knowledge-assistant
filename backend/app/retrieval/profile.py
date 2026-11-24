@@ -27,6 +27,6 @@ def embedding_profile(settings: Settings) -> dict:
 def digest_profile(value: dict) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
 
-
+# 把 heading_path 拼到切片正文前面，补足语义上下文
 def embedding_text(content: str, heading_path: list[str]) -> str:
     return (" / ".join(heading_path) + "\n\n" if heading_path else "") + content
